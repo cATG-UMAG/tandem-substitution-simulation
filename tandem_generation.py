@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import re
-import sys
+import argparse
 from multiprocessing import Pool
 from itertools import chain
 from Bio import SeqIO
@@ -8,63 +8,64 @@ import pandas as pd
 import numpy as np
 
 
-STOP_CODONS = ['TAA', 'TAG', 'TGA']
-
-
 def main():
-    if len(sys.argv) < 6:
-        print("./tandem_generation.py <mutation_info_file> <reference_seq_file> <mutations_byseq_file> <N> <outfile>")
-        sys.exit(-1)
-
     # read arguments
-    mutation_info, ref_file, mutations_by_seq, n, outfile = sys.argv[1:7]
-    n = int(n)
-    target_name = re.sub('^.*/|[.].*$', '', mutation_info)
+    args = parse_arguments()
+    n = int(args.n)
+    target_name = re.sub('^.*/|[.].*$', '', args.mutation_info)
 
     # load data
-    references = {x.id: x for x in SeqIO.parse(ref_file, 'fasta')}
-    with open(mutations_by_seq) as f:
+    references = {x.id: x for x in SeqIO.parse(args.ref_file, 'fasta')}
+    with open(args.mutations_by_seq) as f:
         for line in f.read().splitlines():
             line = line.split('\t')
             if line[0] == target_name:
                 mutations_by_seq = [int(x) for x in line[1].split(',')]
                 break
 
-    m_info = pd.read_csv(mutation_info)
+    m_info = pd.read_csv(args.mutation_info)
     ref = references[target_name]
     n_size = len(str(n))
 
     # runs in parallel n simulations with len(mutations_by_seq) sequences
     with Pool() as p:
-        tandem_info = p.starmap(run_simulation, ((i, m_info, ref, mutations_by_seq, n_size) for i in range(n)))
+        tandem_info = p.starmap(run_simulation, ((i, m_info, ref, mutations_by_seq, n_size, args.method, args.productiveonly) for i in range(n)))
 
     # flatten list of lists to a single list
     tandem_info = list(chain.from_iterable(tandem_info))
 
     tandem_df = pd.DataFrame(tandem_info, columns=['simulation', 'mutations_byseq', 'seq_id', 'pos', 'ref', 'alt', 'size', 'stop_codon'])
-    tandem_df.to_csv(outfile + '.gz', compression='gzip', sep='\t', index=False)
+    tandem_df.to_csv(args.outfile + '.gz', compression='gzip', sep='\t', index=False)
 
 
 # "main" operation wrapped in a function, to being able to paralelize it
-def run_simulation(sim_id, m_info, ref, mutations_by_seq, n_size):
+def run_simulation(sim_id, m_info, ref, mutations_by_seq, n_size, method, productive_only=False):
     n_mutations = random_fit_nonnegative(mutations_by_seq, len(mutations_by_seq))
     info_list = []
     for j, k in enumerate(n_mutations):
-        mutations = generate_mutations(ref, m_info.mutation_probability, k)
-        for v in get_1d_clusters(sorted(mutations)):
-            tandem = ''.join(mutations[m] for m in v)
-            t_size = len(v)
+        stop_codon = True
+        while stop_codon:
+            info_sublist = []
+            mutations_fn = generate_mutations_precandidating if method == 'precandidating' else generate_mutations_sampling
+            mutations = mutations_fn(ref, m_info.mutation_probability, k)
+            for v in get_1d_clusters(sorted(mutations)):
+                tandem = ''.join(mutations[m] for m in v)
+                t_size = len(v)
 
-            mutated_subseq = re.sub('[.]+', tandem, get_context(ref, v[0], 2, t_size))
-            # check if a stop codon is produced
-            stop = any(s in mutated_subseq for s in STOP_CODONS)
+                mutated_subseq = re.sub('[.]+', tandem, get_context(ref, v[0], 2, t_size))
+                # check if a stop codon is produced
+                stop_codon = has_stop_codons(mutated_subseq, max(v[0] - 2, 0))
+                if stop_codon and productive_only:
+                    break
 
-            info_list.append([sim_id + 1, k, str(j + 1).zfill(n_size), v[0], ref[v[0]: v[0] + t_size].seq, tandem, t_size, stop])
+                info_sublist.append([sim_id + 1, k, str(j + 1).zfill(n_size), v[0], ref[v[0]: v[0] + t_size].seq, tandem, t_size, stop_codon])
+            stop_codon = False
+        info_list += info_sublist
 
     return info_list
 
 
-def generate_mutations(ref, mutation_probabilities, n):
+def generate_mutations_precandidating(ref, mutation_probabilities, n):
     """Generates a set of mutations on a sequence based on a vector of probabilities."""
     seq_len = len(ref)
     # working with numpy arrays to speed up the proccess
@@ -80,7 +81,19 @@ def generate_mutations(ref, mutation_probabilities, n):
         # randomly select one of the mutation candidates and generate a mutation
         pos = int(np.random.choice(mutation_candidates))
         mutated_base = mutate(ref[pos])
+
         mutations[pos] = mutated_base
+
+    return mutations
+
+
+def generate_mutations_sampling(ref, mutation_probabilities, n):
+    """Generates a set of mutations on a sequence based on a vector of probabilities, using a sampling method"""
+    seq_len = len(ref)
+    positions = np.arange(0, seq_len)
+    mutation_prob = np.array(mutation_probabilities)
+    mutation_prob /= np.sum(mutation_prob)
+    mutations = {int(m): mutate(ref[int(m)]) for m in np.random.choice(positions, size=n, replace=False, p=mutation_prob)}
 
     return mutations
 
@@ -88,6 +101,14 @@ def generate_mutations(ref, mutation_probabilities, n):
 def mutate(base):
     """Chooses randomly a different base than the one from the argument."""
     return np.random.choice([x for x in "ACGT" if x != base])
+
+
+def has_stop_codons(seq, pos):
+    """Checks stop codons"""
+    stop_codons = ('TAA', 'TAG', 'TGA')
+    # get codons using reading frame based on pos
+    codons = re.findall('.{3}', seq[pos % 3:])
+    return any(s in codons for s in stop_codons)
 
 
 def get_context(seq, pos, n=1, s=1):
@@ -136,7 +157,7 @@ def random_fit_nonnegative(values, n):
     sd = np.std(values)
 
     random_values = np.empty(0)
-    offset = 0.05  # 5% offset to compa values less than 0
+    offset = 0.05  # 5% offset to compensate values less than 0
     while len(random_values) < n:
         random_values = np.round(np.random.normal(mean, sd, round(n*(1+offset))))
         random_values = random_values[random_values >= 0]
@@ -144,6 +165,20 @@ def random_fit_nonnegative(values, n):
 
     # slice n first elements and shape the array to int
     return random_values[:n].astype('int')
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Simulates tandem generation based on dataset")
+
+    parser.add_argument('mutation_info', metavar='mutation_info_file', help="file with mutation probabilities (.tsv)")
+    parser.add_argument('ref_file', metavar='reference_seq_file', help="references file (.fasta)")
+    parser.add_argument('mutations_by_seq', metavar='mutations_by_seq_file', help="file with mutations by each sequence in dataset")
+    parser.add_argument('n', metavar='n', help="number of simulations")
+    parser.add_argument('outfile', metavar='output_file', help="output file (.tsv)")
+    parser.add_argument('--method', '-m', metavar='mutation_method', choices=['precandidating', 'sampling'], default='precandidating', help="method used to generate mutations")
+    parser.add_argument('--productiveonly', '-p', action='store_true', help="do not generate stop codons")
+
+    return parser.parse_args()
 
 
 if __name__ == '__main__':

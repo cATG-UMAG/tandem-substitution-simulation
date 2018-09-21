@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Gets proabilites of mutation in each position counting mutations in fasta files
 import re
 from glob import glob
 from Bio import SeqIO
@@ -6,13 +7,18 @@ import pandas as pd
 import numpy as np
 
 
-def main():
-    ref_file = "fasta/references.fasta"
+# pattern to match all the fasta files to find tandems
+FASTA_FILES = "fasta/IG*.fasta"
+# references fasta file: the fasta filename without extension must match with the sequence name in the references
+REFERENCES = "fasta/references.fasta"
 
-    references = {x.id: x for x in SeqIO.parse(ref_file, 'fasta')}
+
+def main():
+    references = {x.id: x for x in SeqIO.parse(REFERENCES, 'fasta')}
     mutations_by_seq = {}
-    for f in glob("fasta/IG*.fasta"):
-        name = re.sub('^.*/|[.].*$', '', f)
+
+    for f in glob(FASTA_FILES):
+        name = re.sub(r'^.*/|[.].*$', '', f)
 
         seqs = [x for x in SeqIO.parse(f, 'fasta')]
         ref = references[name]
@@ -32,9 +38,10 @@ def main():
         df = pd.DataFrame({
             'position': range(1, len(ref) + 1),
             'mutation_count': pos_counts.astype(int),
-            'mutation_probability': pos_counts / len(seqs)})
+            'mutation_probability': pos_counts / len(seqs)
+        })
 
-        df.to_csv("mutation_info/{}.tsv".format(name), index=False)
+        df.to_csv("mutation_info/{}.tsv".format(name), sep='\t', index=False)
 
     with open('mutation_info/mutations_by_seq.txt', 'w') as f:
         f.write('\n'.join("{}\t{}".format(k, ','.join(str(x) for x in mutations_by_seq[k])) for k in mutations_by_seq))

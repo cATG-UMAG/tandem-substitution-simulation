@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Gets reference sequences from IG germline, and check the consensus sequence agains them
 import re
 from glob import glob
 from Bio import SeqIO

@@ -24,8 +24,9 @@ def tandem_distplot(family_name):
     pdf = stats.norm.pdf(real_tandems, np.mean(sim_tandems.n), np.std(sim_tandems.n))
 
     # plot
+    bin_step = np.ceil(real_tandems / 500)  # guarantees good visualization in the pdf output
     fig, ax = plt.subplots(figsize=(12, 8))
-    ax.hist(sim_tandems.n, bins=np.arange(min(sim_tandems.n), max(sim_tandems.n)), align='left', lw=0.1, label='simulated')
+    ax.hist(sim_tandems.n, bins=np.arange(min(sim_tandems.n), max(sim_tandems.n), bin_step), align='left', lw=0.1, label='simulated')
     ax.axvline(x=real_tandems, ymin=0, ymax=1, linewidth=1.5, color='forestgreen', label='real')
     ax.text(real_tandems, ax.get_ylim()[1] * 0.85, "real = {}".format(real_tandems), ha='center', bbox=dict(fc="w", ec="0.5", alpha=0.7))
     ax.text(real_tandems, ax.get_ylim()[1] * 0.03, "pdf = {:.2e}".format(pdf), ha='right', bbox=dict(fc="w", ec="0.5", alpha=0.7))
@@ -59,7 +60,7 @@ def mutation_probability(family_name):
     df = pd.read_table("mutation_info/{}.tsv".format(family_name))
 
     # plot
-    fig, ax = plt.subplots(figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(10, 5))
     ax.bar(x=df.position, height=df.mutation_probability, lw=0)
     ax.set(title="Mutation probabilities by position ({})".format(family_name), xlabel="Position in sequence", ylabel="Mutation probability")
     sns.despine()
@@ -112,12 +113,12 @@ def tandem_heatmap(family_name, target="real"):
 
     # some variables
     annot_fmt = ".0f" if target == "real" else ".2f"
-    cbar_label = "Number of tandems" + " (average of simulations)" if target == "simulation" else ""
+    cbar_label = "Number of tandems" + (" (average of simulations)" if target == "simulated" else "")
 
     # plot
     with sns.axes_style("darkgrid"):
         fig, ax = plt.subplots(figsize=(13, 11))
-        sns.heatmap(table, ax=ax, cmap="YlGnBu", annot=True, fmt=annot_fmt, square=True, linewidths=1, cbar_kws=dict(label=cbar_label))
+        sns.heatmap(table, ax=ax, cmap="YlGnBu", annot=True, fmt=annot_fmt, square=True, linewidths=1, cbar_kws={'label': cbar_label})
         ax.set(title="Tandem distribution from {} data ({})".format(target, family_name), xlabel="ALT", ylabel="REF")
 
     return fig

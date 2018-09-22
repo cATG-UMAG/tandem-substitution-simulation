@@ -1,6 +1,6 @@
 # This module contains plots to show data
 # Assummes the files are located in certains places
-from itertools import product
+from itertools import product, zip_longest
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -76,12 +76,24 @@ def cluster_size_distribution(family_name):
     # group clusters by size
     df_real_bysize = df_real.groupby('size').agg({'seq_id': 'count'}).reset_index().rename(columns={'seq_id': 'n'})
     df_sim_bysize = df_sim.groupby('size').agg({'n': 'sum'}).reset_index()
-    df_sim_bysize['n'] = np.round(df_sim_bysize['n'] / 100000)  # get the average of the 100000 simulations
+    df_sim_bysize['n'] = np.round(df_sim_bysize['n'] / len(df_sim.simulation.unique()))  # get the average of all the simulations
+    df_sim_bysize = df_sim_bysize[df_sim_bysize.n != 0]  # drop the rows with 0 tandems
 
     # plot
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.bar(df_real_bysize['size'], df_real_bysize['n'], label='real', alpha=0.5)
     ax.bar(df_sim_bysize['size'], df_sim_bysize['n'], label='simulation', alpha=0.5)
+
+    # annotated values
+    offset = max(df_real_bysize.n) * 0.02
+    for r, s in zip_longest(df_real_bysize.itertuples(), df_sim_bysize.itertuples()):
+        x = r.size if r else s.size
+        y = r.n if r else s.n
+        ax.text(x, y + offset, "{} ".format(r.n if r else 0), ha='right', color='#1f77b4')
+        ax.text(x, y + offset, "|", ha='center', color='gray')  # divider
+        ax.text(x, y + offset, " {}".format(int(s.n) if s else 0), ha='left', color='#ff7f0e')
+    ax.set_ylim([0, max(df_real_bysize.n) + offset * 5])
+
     ax.set(title="Distributions of mutation clusters by size ({})".format(family_name), xlabel="Cluster size", ylabel="Number of clusters")
     ax.legend()
     sns.despine()
@@ -103,22 +115,25 @@ def tandem_heatmap(family_name, target="real"):
     dc_df = pd.DataFrame(dinucleotide_combinations, columns=['ref', 'alt', 'n'])
 
     # group by substitution and count
-    grouped = pd.DataFrame(df.groupby(['ref', 'alt']).size()).reset_index().rename(columns={0: 'n'})
+    if target == 'real':
+        grouped = df.groupby(['ref', 'alt']).agg({'seq_id': 'count'}).reset_index().rename(columns={'seq_id': 'n'})
+    else:
+        grouped = df.groupby(['ref', 'alt']).agg({'n': 'sum'}).reset_index()
     # add rows with 0 and make the table
     table = pd.concat([grouped, dc_df]).drop_duplicates(subset=['ref', 'alt'], keep='first').pivot('ref', 'alt', 'n')
 
-    # if the dataset is from the simulation, get the average between the 100000 simulations
+    # if the dataset is from the simulation, get the average between all the simulations
     if target == "simulated":
-        table /= 100000
+        table = np.round(table / len(df.simulation.unique()), 1)
 
     # some variables
-    annot_fmt = ".0f" if target == "real" else ".2f"
+    annot_fmt = ".0f" if target == "real" else ".1f"
     cbar_label = "Number of tandems" + (" (average of simulations)" if target == "simulated" else "")
 
     # plot
     with sns.axes_style("darkgrid"):
         fig, ax = plt.subplots(figsize=(13, 11))
-        sns.heatmap(table, ax=ax, cmap="YlGnBu", annot=True, fmt=annot_fmt, square=True, linewidths=1, cbar_kws={'label': cbar_label})
+        sns.heatmap(table.iloc[::-1], ax=ax, cmap="YlGnBu", annot=True, fmt=annot_fmt, square=True, linewidths=1, cbar_kws={'label': cbar_label})
         ax.set(title="Tandem distribution from {} data ({})".format(target, family_name), xlabel="ALT", ylabel="REF")
 
     return fig

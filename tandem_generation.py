@@ -42,12 +42,17 @@ def main():
 def run_simulation(sim_id, m_info, ref, mutations_by_seq, n_size, method, productive_only=False, fit_normal_nmutations=False):
     mutations_fn = generate_mutations_precandidating if method == 'precandidating' else generate_mutations_sampling
     n_mutations = random_fit_nonnegative(mutations_by_seq, len(mutations_by_seq)) if fit_normal_nmutations else mutations_by_seq
+
+    # converting data before the loop to save some time
+    mutation_probability = np.array(m_info.mutation_probability)
+    nucl_probabilities = m_info[['A', 'C', 'G', 'T']].to_dict(orient='index')
+
     info_list = []
-    for j, k in enumerate(n_mutations):
+    for i, n in enumerate(n_mutations):
         stop_codon = True
         while stop_codon:
             info_sublist = []
-            mutations = mutations_fn(ref, m_info.mutation_probability, k)
+            mutations = mutations_fn(ref, mutation_probability, n, nucl_probabilities)
             for v in get_1d_clusters(sorted(mutations)):
                 tandem = ''.join(mutations[m] for m in v)
                 t_size = len(v)
@@ -58,14 +63,14 @@ def run_simulation(sim_id, m_info, ref, mutations_by_seq, n_size, method, produc
                 if stop_codon and productive_only:
                     break
 
-                info_sublist.append([sim_id + 1, k, str(j + 1).zfill(n_size), v[0], ref[v[0]: v[0] + t_size].seq, tandem, t_size, stop_codon])
+                info_sublist.append([sim_id + 1, n, str(i + 1).zfill(n_size), v[0], ref[v[0]: v[0] + t_size].seq, tandem, t_size, stop_codon])
             stop_codon = False
         info_list += info_sublist
 
     return info_list
 
 
-def generate_mutations_precandidating(ref, mutation_probabilities, n):
+def generate_mutations_precandidating(ref, mutation_probabilities, n, nucl_probabilities):
     """Generates a set of mutations on a sequence based on a vector of probabilities."""
     seq_len = len(ref)
     # working with numpy arrays to speed up the proccess
@@ -80,25 +85,28 @@ def generate_mutations_precandidating(ref, mutation_probabilities, n):
             mutation_candidates = positions[random <= mutation_prob]
         # randomly select one of the mutation candidates and generate a mutation
         pos = int(np.random.choice(mutation_candidates))
-        mutations[pos] = mutate(ref[pos])
+        mutations[pos] = mutate(ref[pos], nucl_probabilities[pos])
 
     return mutations
 
 
-def generate_mutations_sampling(ref, mutation_probabilities, n):
+def generate_mutations_sampling(ref, mutation_probabilities, n, nucl_probabilities):
     """Generates a set of mutations on a sequence based on a vector of probabilities, using a sampling method"""
     seq_len = len(ref)
     positions = np.arange(0, seq_len)
     mutation_prob = np.array(mutation_probabilities)
     mutation_prob /= np.sum(mutation_prob)  # array sum must me 1
-    mutations = {int(m): mutate(ref[int(m)]) for m in np.random.choice(positions, size=n, replace=False, p=mutation_prob)}
+    mutations = {int(m): mutate(ref[int(m)], nucl_probabilities[int(m)]) for m in np.random.choice(positions, size=n, replace=False, p=mutation_prob)}
 
     return mutations
 
 
-def mutate(base):
-    """Chooses randomly a different base than the one from the argument."""
-    return np.random.choice([x for x in "ACGT" if x != base])
+def mutate(base, nucl_probability=None):
+    """Chooses randomly a different base than the one from the argument or choices one based on a vector of probabilities."""
+    if nucl_probability:
+        return np.random.choice(('A', 'C', 'G', 'T'), p=[nucl_probability[x] for x in "ACGT"])
+    else:
+        return np.random.choice([x for x in "ACGT" if x != base])
 
 
 def has_stop_codons(seq, pos):

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
+from matplotlib import rcParams
 from scipy import stats
 
 
@@ -14,7 +15,7 @@ TANDEM_REAL_DIR = "tandem_info/real"
 TANDEM_SIM_SUMM_DIR = "tandem_info_summarized/sampling"
 
 
-def tandem_distplot(family_name):
+def tandem_distplot(family_name, show_pdf=True, split_axis=False):
     """Plots the distribution of the tandems by simulation vs the real value"""
     # load data
     df_real = pd.read_table(_find_filename("{}/{}.tsv".format(TANDEM_REAL_DIR, family_name)))
@@ -27,18 +28,43 @@ def tandem_distplot(family_name):
     real_tandems = len(df_real)
     sim_tandems = df_sim.groupby('simulation').agg({'n': 'sum'})
 
-    pdf = stats.norm.pdf(real_tandems, np.mean(sim_tandems.n), np.std(sim_tandems.n))
+    # this value determines bin size and also where to cut axis if split_axis is True
+    adjust_value = 50 if max(sim_tandems.n) - min(sim_tandems.n) < 150 else 100
 
-    # plot
-    bin_step = np.ceil(real_tandems / 500)  # guarantees good visualization in the pdf output
-    fig, ax = plt.subplots(figsize=(12, 8))
+    bin_step = np.ceil(real_tandems / (adjust_value * 5))  # guarantees good visualization in the pdf output
+    if split_axis:
+        # Make a figure with 2 subplots
+        fig, (ax, ax2) = plt.subplots(1, 2, sharey=True, figsize=(12, 8), gridspec_kw={'width_ratios': [5, 1]})
+        ax.set_xlim(adjust_value * np.floor(min(sim_tandems.n) / adjust_value), adjust_value * np.ceil(max(sim_tandems.n) / adjust_value))
+        ax2_limits = [adjust_value * np.floor(real_tandems / adjust_value), adjust_value * np.ceil(real_tandems / adjust_value)]
+        ax2.set_xlim(*ax2_limits)
+    else:
+        fig, ax = plt.subplots(figsize=(12, 8))
+        ax2 = ax  # this way is not neccesary to use conditions to know where to plot the real value
+
+    # plot simulated and real values
     ax.hist(sim_tandems.n, bins=np.arange(min(sim_tandems.n), max(sim_tandems.n), bin_step), align='left', lw=0.1, label='simulated')
-    ax.axvline(x=real_tandems, ymin=0, ymax=1, linewidth=1.5, color='forestgreen', label='real')
-    ax.text(real_tandems, ax.get_ylim()[1] * 0.85, "real = {}".format(real_tandems), ha='center', bbox=dict(fc="w", ec="0.5", alpha=0.7))
-    ax.text(real_tandems, ax.get_ylim()[1] * 0.03, "pdf = {:.2e}".format(pdf), ha='right', bbox=dict(fc="w", ec="0.5", alpha=0.7))
-    ax.set(title="Distribution of tandems by simulation size=2 ({})".format(family_name), xlabel="Tandems by simulation", ylabel="Simulations")
-    ax.legend(loc='upper center')
+    ax2.axvline(x=real_tandems, ymin=0, ymax=1, linewidth=1.5, color='forestgreen', label='observed')
+
+    # annotations and labels
+    ax2.text(real_tandems, ax.get_ylim()[1] * 0.9, "observed = {}".format(real_tandems), ha='center', bbox=dict(fc="w", ec="0.5", alpha=0.5))
+    ax.set(ylabel="Simulations")
+    fig.suptitle("Distribution of tandems by simulation ({})".format(family_name), fontsize=rcParams["axes.titlesize"])
+    fig.text(0.5, -0.01, 'Tandems by simulations', ha='center')
+    # ax.legend(loc='upper left')
+
+    if show_pdf:
+        pdf = stats.norm.pdf(real_tandems, np.mean(sim_tandems.n), np.std(sim_tandems.n))
+        ax2.text(real_tandems, ax.get_ylim()[1] * 0.03, "pdf = {:.2e}".format(pdf), ha='right', bbox=dict(fc="w", ec="0.5", alpha=0.7))
+
     sns.despine()
+    if split_axis:
+        # options to make the two plots look like a single one
+        ax.spines['right'].set_visible(False)
+        ax2.spines['left'].set_visible(False)
+        ax.tick_params(labelright=False)
+        ax2.xaxis.set_ticks(ax2_limits)
+        ax2.yaxis.set_ticks_position('none')
 
     return fig
 

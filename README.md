@@ -2,7 +2,7 @@
 
 This project aims to simulate and identify "false tandems" produced by the presence of multiple contiguous mutations. The main script is `tandem_generation.py`, it simulates mutations and collect information about clusters multiple mutations. Outputs a table with the information for each cluster found.
 
-Also, in utils directory are some aditional scripts:
+Also, in `utils` directory are some aditional scripts:
 
 - `get_references.py`  finds refereces by name in germline and output them to a single fasta file.
 
@@ -17,9 +17,9 @@ Also, in utils directory are some aditional scripts:
 ## Usage example
 
 - Install dependencies: `pip install -r requirements.txt`
-- Get references: `./get_references.py`
-- Get mutation probabilities: `./get_probabilities.py`
-- Get tandems from real data: `./get_tandems.py`
+- Get references: `utils/get_references.py`
+- Get mutation probabilities: `utils/get_probabilities.py`
+- Get tandems from real data: `utils/get_tandems.py`
 - Generate tandem information (1000 simulations): `./tandem_generation.py mutation_info/IGHV1-2-02.tsv fasta/references.fasta mutation_info/mutations_by_seq.txt 1000 tandem_info/simulated/IGHV1-2-02.tsv`
-- Summarize simulated info: `./summarize_tandem_info.py`
-- Plot using the functions from `plots.py`
+- Summarize simulated info: `utils/summarize_tandem_info.py`
+- Plot using the functions from `utils/plots.py`

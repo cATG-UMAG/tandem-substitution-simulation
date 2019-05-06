@@ -25,7 +25,7 @@ def main():
                 mutations_by_seq = [int(x) for x in line[1].split(",")]
                 break
 
-    m_info = pd.read_table(args.mutation_info)
+    m_info = pd.read_csv(args.mutation_info, sep="\t")
     ref = references[target_name]
     n_size = len(str(n))
 

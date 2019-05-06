@@ -23,7 +23,7 @@ def summarize(filename):
 
     makedirs(path.join(OUTPUT_DIR, method, name), exist_ok=True)
 
-    df = pd.read_table(filename)
+    df = pd.read_csv(filename, sep="\t")
 
     for v in [False, True]:
         suffix = "_stop" if v is True else ""

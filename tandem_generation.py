@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
-import re
 import argparse
-from multiprocessing import Pool
+import re
 from itertools import chain
-from Bio import SeqIO
-import pandas as pd
+from multiprocessing import Pool
+
 import numpy as np
+import pandas as pd
+
+from Bio import SeqIO
 
 
 def main():
     # read arguments
     args = parse_arguments()
     n = int(args.n)
-    target_name = re.sub('^.*/|[.].*$', '', args.mutation_info)
+    target_name = re.sub("^.*/|[.].*$", "", args.mutation_info)
 
     # load data
-    references = {x.id: x for x in SeqIO.parse(args.ref_file, 'fasta')}
+    references = {x.id: x for x in SeqIO.parse(args.ref_file, "fasta")}
     with open(args.mutations_by_seq) as f:
         for line in f.read().splitlines():
-            line = line.split('\t')
+            line = line.split("\t")
             if line[0] == target_name:
-                mutations_by_seq = [int(x) for x in line[1].split(',')]
+                mutations_by_seq = [int(x) for x in line[1].split(",")]
                 break
 
     m_info = pd.read_table(args.mutation_info)
@@ -29,23 +31,67 @@ def main():
 
     # runs in parallel n simulations with len(mutations_by_seq) sequences
     with Pool() as p:
-        tandem_info = p.starmap(run_simulation, ((i, m_info, ref, mutations_by_seq, n_size, args.method, args.productiveonly, args.fitnmutations) for i in range(n)))
+        tandem_info = p.starmap(
+            run_simulation,
+            (
+                (
+                    i,
+                    m_info,
+                    ref,
+                    mutations_by_seq,
+                    n_size,
+                    args.method,
+                    args.productiveonly,
+                    args.fitnmutations,
+                )
+                for i in range(n)
+            ),
+        )
 
     # flatten list of lists to a single list
     tandem_info = list(chain.from_iterable(tandem_info))
 
-    tandem_df = pd.DataFrame(tandem_info, columns=['simulation', 'mutations_byseq', 'seq_id', 'pos', 'ref', 'alt', 'size', 'stop_codon'])
-    tandem_df.to_csv(args.outfile + '.gz', compression='gzip', sep='\t', index=False)
+    tandem_df = pd.DataFrame(
+        tandem_info,
+        columns=[
+            "simulation",
+            "mutations_byseq",
+            "seq_id",
+            "pos",
+            "ref",
+            "alt",
+            "size",
+            "stop_codon",
+        ],
+    )
+    tandem_df.to_csv(args.outfile + ".gz", compression="gzip", sep="\t", index=False)
 
 
 # "main" operation wrapped in a function, to being able to paralelize it
-def run_simulation(sim_id, m_info, ref, mutations_by_seq, n_size, method, productive_only=False, fit_normal_nmutations=False):
-    mutations_fn = generate_mutations_precandidating if method == 'precandidating' else generate_mutations_sampling
-    n_mutations = random_fit_nonnegative(mutations_by_seq, len(mutations_by_seq)) if fit_normal_nmutations else mutations_by_seq
+def run_simulation(
+    sim_id,
+    m_info,
+    ref,
+    mutations_by_seq,
+    n_size,
+    method,
+    productive_only=False,
+    fit_normal_nmutations=False,
+):
+    mutations_fn = (
+        generate_mutations_precandidating
+        if method == "precandidating"
+        else generate_mutations_sampling
+    )
+    n_mutations = (
+        random_fit_nonnegative(mutations_by_seq, len(mutations_by_seq))
+        if fit_normal_nmutations
+        else mutations_by_seq
+    )
 
     # converting data before the loop to save some time
     mutation_probability = np.array(m_info.mutation_probability)
-    nucl_probabilities = m_info[['A', 'C', 'G', 'T']].to_dict(orient='index')
+    nucl_probabilities = m_info[["A", "C", "G", "T"]].to_dict(orient="index")
 
     info_list = []
     for i, n in enumerate(n_mutations):
@@ -54,23 +100,38 @@ def run_simulation(sim_id, m_info, ref, mutations_by_seq, n_size, method, produc
             info_sublist = []
             mutations = mutations_fn(ref, mutation_probability, n, nucl_probabilities)
             for v in get_1d_clusters(sorted(mutations)):
-                tandem = ''.join(mutations[m] for m in v)
+                tandem = "".join(mutations[m] for m in v)
                 t_size = len(v)
 
-                mutated_subseq = re.sub('[.]+', tandem, get_context(ref, v[0], 2, t_size))
+                mutated_subseq = re.sub(
+                    "[.]+", tandem, get_context(ref, v[0], 2, t_size)
+                )
                 # check if a stop codon is produced
                 stop_codon = has_stop_codons(mutated_subseq, max(v[0] - 2, 0))
                 if stop_codon and productive_only:
                     break
 
-                info_sublist.append([sim_id + 1, n, str(i + 1).zfill(n_size), v[0], ref[v[0]: v[0] + t_size].seq, tandem, t_size, stop_codon])
+                info_sublist.append(
+                    [
+                        sim_id + 1,
+                        n,
+                        str(i + 1).zfill(n_size),
+                        v[0],
+                        ref[v[0] : v[0] + t_size].seq,
+                        tandem,
+                        t_size,
+                        stop_codon,
+                    ]
+                )
             stop_codon = False
         info_list += info_sublist
 
     return info_list
 
 
-def generate_mutations_precandidating(ref, mutation_probabilities, n, nucl_probabilities):
+def generate_mutations_precandidating(
+    ref, mutation_probabilities, n, nucl_probabilities
+):
     """Generates a set of mutations on a sequence based on a vector of probabilities."""
     seq_len = len(ref)
     # working with numpy arrays to speed up the proccess
@@ -96,7 +157,10 @@ def generate_mutations_sampling(ref, mutation_probabilities, n, nucl_probabiliti
     positions = np.arange(0, seq_len)
     mutation_prob = np.array(mutation_probabilities)
     mutation_prob /= np.sum(mutation_prob)  # array sum must me 1
-    mutations = {int(m): mutate(ref[int(m)], nucl_probabilities[int(m)]) for m in np.random.choice(positions, size=n, replace=False, p=mutation_prob)}
+    mutations = {
+        int(m): mutate(ref[int(m)], nucl_probabilities[int(m)])
+        for m in np.random.choice(positions, size=n, replace=False, p=mutation_prob)
+    }
 
     return mutations
 
@@ -104,16 +168,18 @@ def generate_mutations_sampling(ref, mutation_probabilities, n, nucl_probabiliti
 def mutate(base, nucl_probability=None):
     """Chooses randomly a different base than the one from the argument or choices one based on a vector of probabilities."""
     if nucl_probability:
-        return np.random.choice(('A', 'C', 'G', 'T'), p=[nucl_probability[x] for x in "ACGT"])
+        return np.random.choice(
+            ("A", "C", "G", "T"), p=[nucl_probability[x] for x in "ACGT"]
+        )
     else:
         return np.random.choice([x for x in "ACGT" if x != base])
 
 
 def has_stop_codons(seq, pos):
     """Checks stop codons"""
-    stop_codons = ('TAA', 'TAG', 'TGA')
+    stop_codons = ("TAA", "TAG", "TGA")
     # get codons using reading frame based on pos
-    codons = re.findall('.{3}', seq[pos % 3:])
+    codons = re.findall(".{3}", seq[pos % 3 :])
     return any(s in codons for s in stop_codons)
 
 
@@ -130,13 +196,13 @@ def get_context(seq, pos, n=1, s=1):
     for n in range(pos - n, pos + n + s):
         if pos <= n < pos + s:
             # target region, will be represented with dots
-            context.append('.')
+            context.append(".")
         elif 0 <= n < len(seq):
             # context region, if it is in sequence boundaries
             context.append(seq[n])
         # else (positions outside sequence) => nothing
 
-    return ''.join(context)
+    return "".join(context)
 
 
 def get_1d_clusters(data, stepsize=1):
@@ -167,28 +233,57 @@ def random_fit_nonnegative(values, n):
     while len(random_values) < n:
         random_values = np.round(np.random.normal(mean, sd, round(n * (1 + offset))))
         random_values = random_values[random_values >= 0]
-        offset *= 2  # If the while loop check fail, next time will try with a larger offset
+        offset *= (
+            2
+        )  # If the while loop check fail, next time will try with a larger offset
 
     # slice n first elements and shape the array to int
-    return random_values[:n].astype('int')
+    return random_values[:n].astype("int")
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Simulates tandem generation based on dataset")
+    parser = argparse.ArgumentParser(
+        description="Simulates tandem generation based on dataset"
+    )
 
-    parser.add_argument('mutation_info', metavar='mutation_info_file', help="file with mutation probabilities (.tsv)")
-    parser.add_argument('ref_file', metavar='reference_seq_file', help="references file (.fasta)")
-    parser.add_argument('mutations_by_seq', metavar='mutations_by_seq_file', help="file with mutations by each sequence in dataset")
-    parser.add_argument('n', metavar='n', help="number of simulations")
-    parser.add_argument('outfile', metavar='output_file', help="output file (.tsv)")
-    parser.add_argument('--method', '-m', metavar='mutation_method', choices=['precandidating', 'sampling'], default='precandidating',
-                        help="method used to generate mutations")
-    parser.add_argument('--productiveonly', '-p', action='store_true', help="do not generate stop codons")
-    parser.add_argument('--fitnmutations', '-f', action='store_true',
-                        help="get number of mutations by sequence from a normal distribution fitted from real data")
+    parser.add_argument(
+        "mutation_info",
+        metavar="mutation_info_file",
+        help="file with mutation probabilities (.tsv)",
+    )
+    parser.add_argument(
+        "ref_file", metavar="reference_seq_file", help="references file (.fasta)"
+    )
+    parser.add_argument(
+        "mutations_by_seq",
+        metavar="mutations_by_seq_file",
+        help="file with mutations by each sequence in dataset",
+    )
+    parser.add_argument("n", metavar="n", help="number of simulations")
+    parser.add_argument("outfile", metavar="output_file", help="output file (.tsv)")
+    parser.add_argument(
+        "--method",
+        "-m",
+        metavar="mutation_method",
+        choices=["precandidating", "sampling"],
+        default="precandidating",
+        help="method used to generate mutations",
+    )
+    parser.add_argument(
+        "--productiveonly",
+        "-p",
+        action="store_true",
+        help="do not generate stop codons",
+    )
+    parser.add_argument(
+        "--fitnmutations",
+        "-f",
+        action="store_true",
+        help="get number of mutations by sequence from a normal distribution fitted from real data",
+    )
 
     return parser.parse_args()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

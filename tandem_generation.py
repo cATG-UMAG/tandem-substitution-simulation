@@ -27,7 +27,11 @@ def main():
                 break
 
     m_info = pd.read_csv(args.mutation_info, sep="\t")
-    ref = [v for k, v in references.items() if k.startswith(target_name)]
+    ref = (
+        [references[target_name]]
+        if not args.multiplereferences
+        else [v for k, v in references.items() if k.startswith(target_name)]
+    )
     n_size = len(str(n))
 
     # If references are multiple, then make a modified m_info for each one.
@@ -310,7 +314,7 @@ def parse_arguments():
         help="number of threads to use in the simulation",
     )
     parser.add_argument(
-        "--multiple-references",
+        "--multiplereferences",
         "-r",
         action="store_true",
         help="use multiple references with a single mutation info file",

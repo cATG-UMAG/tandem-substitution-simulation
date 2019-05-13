@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import argparse
+import csv
 import re
-from itertools import chain
 from multiprocessing import Pool
+from random import choices
 
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ def main():
     # read arguments
     args = parse_arguments()
     n = int(args.n)
-    target_name = re.sub("^.*/|[.].*$", "", args.mutation_info)
+    target_name = re.sub(r"^.*/|[.].*$", "", args.mutation_info)
 
     # load data
     references = {x.id: x for x in SeqIO.parse(args.ref_file, "fasta")}
@@ -26,45 +27,50 @@ def main():
                 break
 
     m_info = pd.read_csv(args.mutation_info, sep="\t")
-    ref = references[target_name]
+    ref = [v for k, v in references.items() if k.startswith(target_name)]
     n_size = len(str(n))
 
+    # If references are multiple, then make a modified m_info for each one.
+    if len(ref) > 1:
+        m_info_by_ref = [correct_mutation_info(m_info, x.seq) for x in ref]
+
     # runs in parallel n simulations with len(mutations_by_seq) sequences
-    with Pool() as p:
+    with Pool(args.threads) as p:
         tandem_info = p.starmap(
             run_simulation,
             (
                 (
                     i,
-                    m_info,
-                    ref,
+                    m_info_by_ref[r] if len(ref) > 1 else m_info,
+                    ref[r],
                     mutations_by_seq,
                     n_size,
                     args.method,
                     args.productiveonly,
                     args.fitnmutations,
                 )
-                for i in range(n)
+                for i, r in zip(range(n), choices(range(len(ref)), k=n))
             ),
         )
 
-    # flatten list of lists to a single list
-    tandem_info = list(chain.from_iterable(tandem_info))
+    df_columns = [
+        "simulation",
+        "mutations_byseq",
+        "seq_id",
+        "pos",
+        "ref",
+        "alt",
+        "size",
+        "stop_codon",
+    ]
 
-    tandem_df = pd.DataFrame(
-        tandem_info,
-        columns=[
-            "simulation",
-            "mutations_byseq",
-            "seq_id",
-            "pos",
-            "ref",
-            "alt",
-            "size",
-            "stop_codon",
-        ],
-    )
-    tandem_df.to_csv(args.outfile + ".gz", compression="gzip", sep="\t", index=False)
+    # Writes csv directly. Sorting and compression goes outside.
+    with open(args.outfile, "w") as csvfile:
+        writer = csv.writer(csvfile, delimiter="\t")
+        writer.writerow(df_columns)  # header
+
+        while tandem_info:
+            writer.writerows(tandem_info.pop())
 
 
 # "main" operation wrapped in a function, to being able to paralelize it
@@ -112,17 +118,18 @@ def run_simulation(
                     break
 
                 info_sublist.append(
-                    [
+                    (
                         sim_id + 1,
                         n,
                         str(i + 1).zfill(n_size),
                         v[0],
-                        ref[v[0] : v[0] + t_size].seq,
+                        str(ref[v[0] : v[0] + t_size].seq),
                         tandem,
                         t_size,
                         stop_codon,
-                    ]
+                    )
                 )
+
             stop_codon = False
         info_list += info_sublist
 
@@ -166,7 +173,7 @@ def generate_mutations_sampling(ref, mutation_probabilities, n, nucl_probabiliti
 
 
 def mutate(base, nucl_probability=None):
-    """Chooses randomly a different base than the one from the argument or choices one based on a vector of probabilities."""
+    """Chooses randomly a different base than the one from the argument or one based on a vector of probabilities."""
     if nucl_probability:
         return np.random.choice(
             ("A", "C", "G", "T"), p=[nucl_probability[x] for x in "ACGT"]
@@ -199,8 +206,7 @@ def get_context(seq, pos, n=1, s=1):
             context.append(".")
         elif 0 <= n < len(seq):
             # context region, if it is in sequence boundaries
-            context.append(seq[n])
-        # else (positions outside sequence) => nothing
+            context.append(seq[n])  # else (positions outside sequence) => nothing
 
     return "".join(context)
 
@@ -241,6 +247,33 @@ def random_fit_nonnegative(values, n):
     return random_values[:n].astype("int")
 
 
+def correct_mutation_info(m_info, reference):
+    """
+    Makes a modified version of the mutation_info dataframe using the reference to correct it.
+    Used when a single mutation_info object is used against multiple references.
+    """
+    ref = str(reference)
+    m_info = m_info.copy()
+
+    # iterate over sequence positions
+    for b, r in zip(ref, m_info.itertuples()):
+        # if the probability of the reference base is not 0 a correction is needed
+        if getattr(r, b) != 0:
+            m_info.loc[m_info.position == r.position, b] = 0
+            if getattr(r, b) == 1:
+                # If the probability was 1, the is enough with this
+                m_info.loc[m_info.position == r.position, "mutation_probability"] = 0
+            else:
+                # If not was 1, then the other probabilities have to be corrected
+                bases = [x for x in "ACGT" if x != b]
+                psum = sum(getattr(r, x) for x in bases)
+                m_info.loc[m_info.position == r.position, bases] = [
+                    getattr(r, x) / psum for x in bases
+                ]
+
+    return m_info
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Simulates tandem generation based on dataset"
@@ -266,8 +299,21 @@ def parse_arguments():
         "-m",
         metavar="mutation_method",
         choices=["precandidating", "sampling"],
-        default="precandidating",
+        default="sampling",
         help="method used to generate mutations",
+    )
+    parser.add_argument(
+        "--threads",
+        "-t",
+        type=int,
+        default=1,
+        help="number of threads to use in the simulation",
+    )
+    parser.add_argument(
+        "--multiple-references",
+        "-r",
+        action="store_true",
+        help="use multiple references with a single mutation info file",
     )
     parser.add_argument(
         "--productiveonly",

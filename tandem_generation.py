@@ -8,7 +8,7 @@ from random import choices
 import numpy as np
 import pandas as pd
 
-from Bio import SeqIO
+from Bio import Seq, SeqIO
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     )
     n_size = len(str(n))
 
-    # If references are multiple, then make a modified m_info for each one.
+    # if references are multiple, then make a modified m_info for each one.
     if len(ref) > 1:
         m_info_by_ref = [correct_mutation_info(m_info, x.seq) for x in ref]
 
@@ -65,10 +65,12 @@ def main():
         "ref",
         "alt",
         "size",
+        "context",
+        "aa_change",
         "stop_codon",
     ]
 
-    # Writes csv directly. Sorting and compression goes outside.
+    # writes csv directly. Sorting and compression goes outside.
     with open(args.outfile, "w") as csvfile:
         writer = csv.writer(csvfile, delimiter="\t")
         writer.writerow(df_columns)  # header
@@ -113,9 +115,9 @@ def run_simulation(
                 tandem = "".join(mutations[m] for m in v)
                 t_size = len(v)
 
-                mutated_subseq = re.sub(
-                    "[.]+", tandem, get_context(ref, v[0], 2, t_size)
-                )
+                context = get_context(ref, v[0], 2, t_size)
+                # create the "mutated subsequence" replacing the tandem alt into the context
+                mutated_subseq = re.sub(r"[.]+", tandem, context)
                 # check if a stop codon is produced
                 stop_codon = has_stop_codons(mutated_subseq, max(v[0] - 2, 0))
                 if stop_codon and productive_only:
@@ -130,7 +132,8 @@ def run_simulation(
                         str(ref[v[0] : v[0] + t_size].seq),
                         tandem,
                         t_size,
-                        stop_codon,
+                        context,
+                        get_aa_change(ref, mutated_subseq, max(v[0] - 2, 0)), stop_codon,
                     )
                 )
 
@@ -199,6 +202,22 @@ def has_stop_codons(seq, pos):
     return any(s in codons for s in stop_codons)
 
 
+def get_aa_change(ref, seq, pos):
+    """
+    Builds aa change using reference and mutated sequence.
+    :param ref: full reference sequence (Bio.Seq)
+    :param seq: mutated subsequence (mutation + 2nt context each side)
+    :param pos: position of the subsequence in terms of the original full sequence
+    :return: a string in the form "{}>{}" with the aa changes
+    """
+    framed_pos = int((pos + 2)/3) * 3  # position of the first full frame in the subsequence
+    coding_alt = seq[framed_pos - pos :]
+    coding_alt = Seq.Seq(coding_alt[: 3 * int(len(coding_alt) / 3)])
+    coding_ref = ref[framed_pos : framed_pos + len(coding_alt)]
+
+    return f"{str(coding_ref.seq.translate())}>{str(coding_alt.translate())}"
+
+
 def get_context(seq, pos, n=1, s=1):
     """
     Gets context from a sequence at a given position.
@@ -215,7 +234,8 @@ def get_context(seq, pos, n=1, s=1):
             context.append(".")
         elif 0 <= n < len(seq):
             # context region, if it is in sequence boundaries
-            context.append(seq[n])  # else (positions outside sequence) => nothing
+            context.append(seq[n])
+        # else (positions outside sequence) => nothing
 
     return "".join(context)
 
@@ -248,9 +268,8 @@ def random_fit_nonnegative(values, n):
     while len(random_values) < n:
         random_values = np.round(np.random.normal(mean, sd, round(n * (1 + offset))))
         random_values = random_values[random_values >= 0]
-        offset *= (
-            2
-        )  # If the while loop check fail, next time will try with a larger offset
+        # If the while loop check fail, next time will try with a larger offset
+        offset *= 2
 
     # slice n first elements and shape the array to int
     return random_values[:n].astype("int")
@@ -270,10 +289,10 @@ def correct_mutation_info(m_info, reference):
         if getattr(r, b) != 0:
             m_info.loc[m_info.position == r.position, b] = 0
             if getattr(r, b) == 1:
-                # If the probability was 1, the is enough with this
+                # If the probability was 1, is enough with this
                 m_info.loc[m_info.position == r.position, "mutation_probability"] = 0
             else:
-                # If not was 1, then the other probabilities have to be corrected
+                # If not was 1, then the other probabilities have to be corrected as well
                 bases = [x for x in "ACGT" if x != b]
                 psum = sum(getattr(r, x) for x in bases)
                 m_info.loc[m_info.position == r.position, bases] = [

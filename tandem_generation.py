@@ -187,10 +187,15 @@ def mutate(base, nucl_probability=None):
 
 
 def has_stop_codons(seq, pos):
-    """Checks stop codons"""
+    """
+    Checks stop codons.
+    :param seq: mutated subsequence
+    :param pos: position of the subsequence in terms of the original full sequence
+    :return: boolean value indicating if the sequence has stop codons or not.
+    """
     stop_codons = ("TAA", "TAG", "TGA")
     # get codons using reading frame based on pos
-    codons = re.findall(".{3}", seq[pos % 3 :])
+    codons = re.findall(".{3}", seq[(3 - pos % 3) % 3 :])
     return any(s in codons for s in stop_codons)
 
 

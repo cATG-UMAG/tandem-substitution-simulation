@@ -6,6 +6,9 @@ __pycache__/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Snakemake
+.snakemake/
+
 # Editor configurations
 .vscode
 .idea

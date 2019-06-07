@@ -1,4 +1,4 @@
-# This module contains plots to show data
+# This file contains plots to show data
 # Assummes the files are located in certains places
 from itertools import product
 from os import path
@@ -443,6 +443,7 @@ def tandem_heatmap_percentage(family_name):
     # get percentage table
     table = np.round(table_sim / table_real * 100, 0)
     table = table.replace([np.inf, -np.inf], np.nan)
+    # table.clip(upper=100, inplace=True)  # here!
 
     # plot
     with sns.axes_style("darkgrid"):

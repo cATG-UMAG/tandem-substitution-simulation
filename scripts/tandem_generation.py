@@ -29,8 +29,8 @@ def main():
     m_info = pd.read_csv(args.mutation_info, sep="\t")
     ref = (
         [references[target_name]]
-        if not args.multiplereferences
-        else [v for k, v in references.items() if k.startswith(target_name)]
+        if not args.referencenames
+        else [references[x] for x in args.referencenames]
     )
     n_size = len(str(n))
 
@@ -66,6 +66,7 @@ def main():
         "alt",
         "size",
         "context",
+        "frame_pos",
         "aa_change",
         "stop_codon",
     ]
@@ -128,12 +129,14 @@ def run_simulation(
                         sim_id + 1,
                         n,
                         str(i + 1).zfill(n_size),
-                        v[0],
+                        v[0] + 1,
                         str(ref[v[0] : v[0] + t_size].seq),
                         tandem,
                         t_size,
                         context,
-                        get_aa_change(ref, mutated_subseq, max(v[0] - 2, 0)), stop_codon,
+                        (v[0] % 3) + 1,
+                        get_aa_change(ref, mutated_subseq, max(v[0] - 2, 0)),
+                        stop_codon,
                     )
                 )
 
@@ -210,7 +213,8 @@ def get_aa_change(ref, seq, pos):
     :param pos: position of the subsequence in terms of the original full sequence
     :return: a string in the form "{}>{}" with the aa changes
     """
-    framed_pos = int((pos + 2)/3) * 3  # position of the first full frame in the subsequence
+    # position of the first full frame in the subsequence
+    framed_pos = int((pos + 2) / 3) * 3
     coding_alt = seq[framed_pos - pos :]
     coding_alt = Seq.Seq(coding_alt[: 3 * int(len(coding_alt) / 3)])
     coding_ref = ref[framed_pos : framed_pos + len(coding_alt)]
@@ -338,10 +342,12 @@ def parse_arguments():
         help="number of threads to use in the simulation",
     )
     parser.add_argument(
-        "--multiplereferences",
+        "--referencenames",
         "-r",
-        action="store_true",
-        help="use multiple references with a single mutation info file",
+        action="store",
+        nargs="+",
+        metavar="REF",
+        help="reference sequences to make the simulation, if not provided then mutation_info filename will be used",
     )
     parser.add_argument(
         "--productiveonly",

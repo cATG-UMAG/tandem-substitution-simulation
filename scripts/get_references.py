@@ -33,9 +33,8 @@ def main():
         ref = ref[:seq_len].upper()
 
         alignments = pairwise2.align.globalxs(ref.seq, consensus, -5, -2)
-        if (
-            alignments[0][-3] < seq_len - 1
-        ):  # check score... left 1 base for errors with consensus
+        # check score... left 1 base for errors with consensus
+        if alignments[0][-3] < seq_len - 1:
             print("Hey, check {}".format(f))
             print(pairwise2.format_alignment(*alignments[0]))
         else:

@@ -1,7 +1,7 @@
 import re
 from itertools import chain
-from os import listdir, makedirs
-from os.path import join
+from os import makedirs
+from os.path import join, isfile
 
 import pandas as pd
 
@@ -19,7 +19,9 @@ def get_all_names(targets):
     return names
 
 
-def merge_mutation_info(groups, input_dir, output_dir):
+def merge_groups_mutation_info(groups, input_dir, output_dir):
+    nucl_cols = ["A", "C", "G", "T"]
+
     # load all the data in memory if some groups have intersections; it shouldn't be so much
     with open(join(input_dir, "mutations_by_seq.txt")) as f:
         mutations_by_seq = {
@@ -37,10 +39,8 @@ def merge_mutation_info(groups, input_dir, output_dir):
         # get means for all relevant columns
         df.groupby("position").mean().reset_index().drop("mutation_count", axis=1)
         # normalize A/C/G/T columns
-        df[["A", "C", "G", "T"]] = (
-            df[["A", "C", "G", "T"]]
-            .divide(df[["A", "C", "G", "T"]].sum(axis=1), axis=0)
-            .fillna(0)
+        df[nucl_cols] = (
+            df[nucl_cols].divide(df[nucl_cols].sum(axis=1), axis=0).fillna(0)
         )
         # save df
         df.to_csv(join(output_dir, f"{group}.tsv"), sep="\t", index=False)
@@ -51,14 +51,53 @@ def merge_mutation_info(groups, input_dir, output_dir):
         )
 
     with open(join(output_dir, "mutations_by_seq.txt"), "w") as f:
-        f.write("\n".join(f"{k}\t{' '.join(v)}" for k, v in mutations_by_seq_g.items()))
+        f.write("\n".join(f"{k}\t{','.join(v)}" for k, v in mutations_by_seq_g.items()))
 
 
-def merge_summaries(input_dirs, output_dir):
+def merge_targets_mutation_info(targets, selected, directory):
+    nucl_cols = ["A", "C", "G", "T"]
+
+    with open(join(directory, "mutations_by_seq.txt")) as f:
+        mutations_by_seq = {
+            x.split("\t")[0]: x.split("\t")[1].split(",") for x in f.read().splitlines()
+        }
+
+    for target in selected:
+        names = [get_name(x) for x in targets[target]["fasta"]]
+        # concat all dataframes in group
+        df = pd.concat(
+            pd.read_csv(join(directory, f"{x}.tsv"), sep="\t") for x in names
+        )
+        # get absolute values
+        df["nseqs"] = df.mutation_count / df.mutation_probability
+        df[nucl_cols] = df[nucl_cols].multiply(df.mutation_count, axis=0)
+        # sum whole dataframe
+        df = df.groupby("position").sum().reset_index()
+        # re-calculate ratios
+        df["mutation_probability"] /= max(
+            df["nseqs"]
+        )  # consider the same number of sequences for all the positions
+        df[nucl_cols] = df[nucl_cols].divide(df.mutation_count, axis=0)
+        df.drop("nseqs", inplace=True, axis=1)
+        df.fillna(0, inplace=True)
+
+        # save df
+        df.to_csv(join(directory, f"{target}.tsv"), sep="\t", index=False)
+
+        # add entry to mutations_by_seq
+        mutations_by_seq[target] = chain.from_iterable(
+            mutations_by_seq[x] for x in names
+        )
+    with open(join(directory, "mutations_by_seq.txt"), "w") as f:
+        f.write("\n".join(f"{k}\t{','.join(v)}" for k, v in mutations_by_seq.items()))
+
+
+def merge_summaries(input_dirs, output_dir, summary_names):
     makedirs(output_dir, exist_ok=True)
 
-    for output_name in listdir(input_dirs[0]):
-        df = pd.concat(pd.read_csv(join(d, output_name), sep="\t") for d in input_dirs)
+    for output_name in [f"{x}.tsv" for x in summary_names]:
+        subset = [join(d, output_name) for d in input_dirs if isfile(join(d, output_name))]
+        df = pd.concat(pd.read_csv(p, sep="\t") for p in subset)
         grouping_cols = [x for x in df.columns if x != "n"]
 
         df = df.groupby(grouping_cols).agg({"n": "sum"}).reset_index()

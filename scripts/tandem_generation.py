@@ -290,7 +290,7 @@ def correct_mutation_info(m_info, reference):
     # iterate over sequence positions
     for b, r in zip(ref, m_info.itertuples()):
         # if the probability of the reference base is not 0 a correction is needed
-        if getattr(r, b) != 0:
+        if b in "ACGT" and getattr(r, b) != 0:
             m_info.loc[m_info.position == r.position, b] = 0
             if getattr(r, b) == 1:
                 # If the probability was 1, is enough with this

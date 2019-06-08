@@ -1,17 +1,19 @@
 configfile: "config.yaml"
 
 from os.path import join
-from utils.helpers import get_name, get_all_names, merge_mutation_info, merge_summaries
+from utils.helpers import get_name, get_all_names, merge_groups_mutation_info, merge_targets_mutation_info, merge_summaries
 from utils.constants import SUMMARY_DETAILS
 
 BASEDIR = config["base_dir"]
 NAMES = get_all_names(config["targets"])
+MULTIPLE_TARGETS = [x for x, y in config["targets"].items() if len(y["fasta"]) > 1]
 SUMMARIES = [x[1] for x in SUMMARY_DETAILS]
 GROUPS = config["groups"] if "groups" in config and config["groups"] else {}
 
 
 rule all:
     input:
+        expand(join(BASEDIR, "tandem_info/single/real/{name}.tsv"), name=NAMES.keys()),
         expand(join(BASEDIR, "tandem_info/single/simulated/{target}.tsv.gz"),
             target=config["targets"].keys()),
         expand(join(BASEDIR, "tandem_info_summarized/single/{target}/{summary}.tsv"),
@@ -33,6 +35,17 @@ rule get_real_tandems:
         "python3 scripts/get_tandems.py {input.fasta_file} {input.reference_file} {output}"
 
 
+rule multiple_target_real_tandem_info:
+    input:
+        lambda w: [join(BASEDIR, f"tandem_info/single/real/{get_name(x)}.tsv")
+            for x in config["targets"][w.name]["fasta"]]
+    output:
+        BASEDIR + "tandem_info/single/real/{name}.tsv"
+    shell:
+        "head -n 1 {input[0]} > {output} && \
+        for f in {input}; do tail -q -n +2 $f >> {output}; done"
+
+
 rule get_mutation_probability:
     input:
         fasta_files = [join(BASEDIR, x) for x in NAMES.values()],
@@ -44,6 +57,19 @@ rule get_mutation_probability:
         outdir = join(BASEDIR, "mutation_info/single/")
     shell:
         "python3 scripts/get_probabilities.py {input.reference_file} {params.outdir} {input.fasta_files}"
+
+
+rule multiple_target_mutation_info:
+    input:
+        [join(BASEDIR, f"mutation_info/single/{get_name(x)}.tsv")
+            for y in MULTIPLE_TARGETS for x in config["targets"][y]["fasta"]],
+        join(BASEDIR, "mutation_info/single/mutations_by_seq.txt")
+    output:
+        expand(join(BASEDIR, "mutation_info/single/{target}.tsv"), target=MULTIPLE_TARGETS)
+    params:
+        directory = join(BASEDIR, "mutation_info/single/")
+    run:
+        merge_targets_mutation_info(config["targets"], MULTIPLE_TARGETS, params.directory)
 
 
 rule make_simulation:
@@ -73,7 +99,7 @@ rule sort_and_compress:
 
 rule group_mutation_info:
     input:
-        expand(join(BASEDIR, "mutation_info/single/{name}.tsv"), name=NAMES.keys()),
+        expand(join(BASEDIR, "mutation_info/single/{name}.tsv"), name=config["targets"].keys()),
         join(BASEDIR, "mutation_info/single/mutations_by_seq.txt")
     output:
         expand(join(BASEDIR, "mutation_info/grouped/{name}.tsv"), name=GROUPS.keys()),
@@ -83,7 +109,7 @@ rule group_mutation_info:
         output_dir = join(BASEDIR, "mutation_info/grouped/")
     run:
         if len(GROUPS) > 0:
-            merge_mutation_info(GROUPS, params.input_dir, params.output_dir)
+            merge_groups_mutation_info(GROUPS, params.input_dir, params.output_dir)
 
 
 rule group_real_tandem_info:
@@ -119,4 +145,4 @@ rule group_summaries:
         input_dirs = lambda w: [join(BASEDIR, f"tandem_info_summarized/single/{x}") for x in GROUPS[w.group]],
         output_dir = join(BASEDIR, "tandem_info_summarized/grouped/{group}")
     run:
-        merge_summaries(params.input_dirs, params.output_dir)
+        merge_summaries(params.input_dirs, params.output_dir, SUMMARIES)

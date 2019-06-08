@@ -7,6 +7,7 @@ from utils.constants import SUMMARY_DETAILS
 BASEDIR = config["base_dir"]
 NAMES = get_all_names(config["targets"])
 SUMMARIES = [x[1] for x in SUMMARY_DETAILS]
+GROUPS = config["groups"] if "groups" in config and config["groups"] else {}
 
 
 rule all:
@@ -16,10 +17,10 @@ rule all:
         expand(join(BASEDIR, "tandem_info_summarized/single/{target}/{summary}.tsv"),
             target=config["targets"].keys(), summary=SUMMARIES),
         expand(join(BASEDIR, "tandem_info_summarized/grouped/{group}/{summary}.tsv"),
-            group=config["groups"].keys(), summary=SUMMARIES),
-        expand(join(BASEDIR, "tandem_info/grouped/real/{group}.tsv"), group=config["groups"].keys()),
-        expand(join(BASEDIR, "mutation_info/grouped/{name}.tsv"), name=config["groups"].keys()),
-        join(BASEDIR, "mutation_info/grouped/mutations_by_seq.txt")
+            group=GROUPS.keys(), summary=SUMMARIES),
+        expand(join(BASEDIR, "tandem_info/grouped/real/{group}.tsv"), group=GROUPS.keys()),
+        expand(join(BASEDIR, "mutation_info/grouped/{name}.tsv"), name=GROUPS.keys()),
+        join(BASEDIR, "mutation_info/grouped/mutations_by_seq.txt") if len(GROUPS) > 0 else []
 
 
 rule get_real_tandems:
@@ -75,18 +76,19 @@ rule group_mutation_info:
         expand(join(BASEDIR, "mutation_info/single/{name}.tsv"), name=NAMES.keys()),
         join(BASEDIR, "mutation_info/single/mutations_by_seq.txt")
     output:
-        expand(join(BASEDIR, "mutation_info/grouped/{name}.tsv"), name=config["groups"].keys()),
-        join(BASEDIR, "mutation_info/grouped/mutations_by_seq.txt")
+        expand(join(BASEDIR, "mutation_info/grouped/{name}.tsv"), name=GROUPS.keys()),
+        join(BASEDIR, "mutation_info/grouped/mutations_by_seq.txt") if len(GROUPS) > 0 else []
     params:
         input_dir = join(BASEDIR, "mutation_info/single/"),
         output_dir = join(BASEDIR, "mutation_info/grouped/")
     run:
-        merge_mutation_info(config["groups"], params.input_dir, params.output_dir)
+        if len(GROUPS) > 0:
+            merge_mutation_info(GROUPS, params.input_dir, params.output_dir)
 
 
 rule group_real_tandem_info:
     input:
-        lambda w: [join(BASEDIR, f"tandem_info/single/real/{x}.tsv") for x in config["groups"][w.group]]
+        lambda w: [join(BASEDIR, f"tandem_info/single/real/{x}.tsv") for x in GROUPS[w.group]]
     output:
         BASEDIR + "tandem_info/grouped/real/{group}.tsv"
     shell:
@@ -110,11 +112,11 @@ rule group_summaries:
     input:
         lambda w: expand(
             join(BASEDIR, "tandem_info_summarized/single/{target}/{summary}.tsv"),
-            target=config["groups"][w.group], summary=SUMMARIES)
+            target=GROUPS[w.group], summary=SUMMARIES)
     output:
         expand(join(BASEDIR, "tandem_info_summarized/grouped/{{group}}/{summary}.tsv"), summary=SUMMARIES)
     params:
-        input_dirs = lambda w: [join(BASEDIR, f"tandem_info_summarized/single/{x}") for x in config["groups"][w.group]],
+        input_dirs = lambda w: [join(BASEDIR, f"tandem_info_summarized/single/{x}") for x in GROUPS[w.group]],
         output_dir = join(BASEDIR, "tandem_info_summarized/grouped/{group}")
     run:
         merge_summaries(params.input_dirs, params.output_dir)

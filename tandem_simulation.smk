@@ -8,6 +8,7 @@ BASEDIR = config["base_dir"]
 NAMES = get_all_names(config["targets"])
 MULTIPLE_TARGETS = [x for x, y in config["targets"].items() if len(y["fasta"]) > 1]
 SUMMARIES = [x[1] for x in SUMMARY_DETAILS]
+SUMMARY_KIND = ["", "_stop"] if config["with_stopcodons"] else [""]
 GROUPS = config["groups"] if "groups" in config and config["groups"] else {}
 
 
@@ -18,8 +19,8 @@ rule all:
             target=config["targets"].keys()),
         expand(join(BASEDIR, "tandem_info_summarized/single/{target}/{summary}.tsv"),
             target=config["targets"].keys(), summary=SUMMARIES),
-        expand(join(BASEDIR, "tandem_info_summarized/grouped/{group}/{summary}.tsv"),
-            group=GROUPS.keys(), summary=SUMMARIES),
+        expand(join(BASEDIR, "tandem_info_summarized/grouped/{group}/{summary}{kind}.tsv"),
+            group=GROUPS.keys(), summary=SUMMARIES, kind=SUMMARY_KIND),
         expand(join(BASEDIR, "tandem_info/grouped/real/{group}.tsv"), group=GROUPS.keys()),
         expand(join(BASEDIR, "mutation_info/grouped/{name}.tsv"), name=GROUPS.keys()),
         join(BASEDIR, "mutation_info/grouped/mutations_by_seq.txt") if len(GROUPS) > 0 else []
@@ -82,10 +83,11 @@ rule make_simulation:
     threads: 4
     params:
         reference_names = lambda w: [get_name(x) for x in config["targets"][w.target]["fasta"]],
-        simulations = config["simulations"]
+        simulations = config["simulations"],
+        productive_only = "" if config["with_stopcodons"] else "-p"
     shell:
         "python3 scripts/tandem_generation.py {input.mutation_info} {input.references} {input.mutations_by_seq} \
-         {params.simulations} {output} -r {params.reference_names} -t {threads}"
+         {params.simulations} {output} -r {params.reference_names} -t {threads} {params.productive_only}"
 
 
 rule sort_and_compress:
@@ -141,7 +143,7 @@ rule group_summaries:
     output:
         expand(
             join(BASEDIR, "tandem_info_summarized/grouped/{{group}}/{summary}{kind}.tsv"),
-            summary=SUMMARIES, kind=["", "_stop"])
+            summary=SUMMARIES, kind=SUMMARY_KIND)
     params:
         input_dirs = lambda w: [join(BASEDIR, f"tandem_info_summarized/single/{x}") for x in GROUPS[w.group]],
         output_dir = join(BASEDIR, "tandem_info_summarized/grouped/{group}")

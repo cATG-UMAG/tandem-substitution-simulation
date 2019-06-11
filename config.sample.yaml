@@ -1,6 +1,7 @@
 base_dir: ./
 references: fasta/references.fasta
 simulations: 100000
+with_stopcodons: True
 targets:
   IGHV1-2-02:
     fasta:

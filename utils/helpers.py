@@ -92,13 +92,16 @@ def merge_targets_mutation_info(targets, selected, directory):
         f.write("\n".join(f"{k}\t{','.join(v)}" for k, v in mutations_by_seq.items()))
 
 
-def merge_summaries(input_dirs, output_dir, summary_names):
+def merge_summaries(input_dirs, output_dir, summary_names, with_stop=False):
+    suffix = ["", "_stop"] if with_stop else [""]
+
     makedirs(output_dir, exist_ok=True)
 
-    for output_name in [f"{x}.tsv" for x in summary_names]:
-        subset = [join(d, output_name) for d in input_dirs if isfile(join(d, output_name))]
-        df = pd.concat(pd.read_csv(p, sep="\t") for p in subset)
-        grouping_cols = [x for x in df.columns if x != "n"]
+    for name in summary_names:
+        for output_name in [f"{name}{x}.tsv" for x in suffix]:
+            subset = [join(d, output_name) for d in input_dirs if isfile(join(d, output_name))]
+            df = pd.concat(pd.read_csv(p, sep="\t") for p in subset)
+            grouping_cols = [x for x in df.columns if x != "n"]
 
-        df = df.groupby(grouping_cols).agg({"n": "sum"}).reset_index()
-        df.to_csv(join(output_dir, output_name), sep="\t", index=False)
+            df = df.groupby(grouping_cols).agg({"n": "sum"}).reset_index()
+            df.to_csv(join(output_dir, output_name), sep="\t", index=False)

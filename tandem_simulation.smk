@@ -127,11 +127,10 @@ rule summarize:
         join(BASEDIR, "tmp/tandem_info_simulated/{target}.tsv")
     output:
         expand(join(BASEDIR, "tandem_info_summarized/single/{{target}}/{summary}.tsv"), summary=SUMMARIES)
-    threads: 2
     params:
         output_dir = join(BASEDIR, "tandem_info_summarized/single/{target}")
     shell:
-        "PYTHONPATH=. python3 scripts/summarize_tandem_info.py {input} {params.output_dir} {threads}"
+        "PYTHONPATH=. python3 scripts/summarize_tandem_info.py {input} {params.output_dir}"
 
 
 rule group_summaries:

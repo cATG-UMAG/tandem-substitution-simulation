@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Generates summary tables (counts) to speed up viewing/plotting data later
 import sys
-from multiprocessing import Pool
 from os import makedirs, path
 from utils.constants import SUMMARY_DETAILS
 
@@ -10,18 +9,17 @@ import pandas as pd
 
 def main():
     if len(sys.argv) < 3:
-        print("./summarize_tandem_info.py <tandem_file.tsv> <output_dir> [threads]")
+        print("./summarize_tandem_info.py <tandem_file.tsv> <output_dir>")
         exit(-1)
 
     filename, output_dir = sys.argv[1:3]
-    threads = int(sys.argv[3]) if len(sys.argv) == 4 else 1
 
     makedirs(output_dir, exist_ok=True)
 
     df = pd.read_csv(filename, sep="\t")
 
-    with Pool(threads) as p:
-        p.starmap(summarize, [(df, x[0], output_dir, x[1]) for x in SUMMARY_DETAILS])
+    for x in SUMMARY_DETAILS:
+        summarize(df, x[0], output_dir, x[1])
 
 
 def summarize(df, grouping_vars, output_dir, output_name):

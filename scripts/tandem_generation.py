@@ -14,7 +14,6 @@ from Bio import Seq, SeqIO
 def main():
     # read arguments
     args = parse_arguments()
-    n = int(args.n)
     target_name = re.sub(r"^.*/|[.].*$", "", args.mutation_info)
 
     # load data
@@ -32,7 +31,7 @@ def main():
         if not args.referencenames
         else [references[x] for x in args.referencenames]
     )
-    n_size = len(str(n))
+    n_size = len(str(args.n))
 
     # if references are multiple, then make a modified m_info for each one.
     if len(ref) > 1:
@@ -53,7 +52,7 @@ def main():
                     args.productiveonly,
                     args.fitnmutations,
                 )
-                for i, r in zip(range(n), choices(range(len(ref)), k=n))
+                for i, r in zip(range(args.n), choices(range(len(ref)), k=args.n))
             ),
         )
 
@@ -324,7 +323,7 @@ def parse_arguments():
         metavar="mutations_by_seq_file",
         help="file with mutations by each sequence in dataset",
     )
-    parser.add_argument("n", metavar="n", help="number of simulations")
+    parser.add_argument("n", type=int, metavar="n", help="number of simulations")
     parser.add_argument("outfile", metavar="output_file", help="output file (.tsv)")
     parser.add_argument(
         "--method",

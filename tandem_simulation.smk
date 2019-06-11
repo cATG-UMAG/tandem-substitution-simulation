@@ -139,7 +139,9 @@ rule group_summaries:
             join(BASEDIR, "tandem_info_summarized/single/{target}/{summary}.tsv"),
             target=GROUPS[w.group], summary=SUMMARIES)
     output:
-        expand(join(BASEDIR, "tandem_info_summarized/grouped/{{group}}/{summary}.tsv"), summary=SUMMARIES)
+        expand(
+            join(BASEDIR, "tandem_info_summarized/grouped/{{group}}/{summary}{kind}.tsv"),
+            summary=SUMMARIES, kind=["", "_stop"])
     params:
         input_dirs = lambda w: [join(BASEDIR, f"tandem_info_summarized/single/{x}") for x in GROUPS[w.group]],
         output_dir = join(BASEDIR, "tandem_info_summarized/grouped/{group}")

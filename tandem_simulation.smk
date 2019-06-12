@@ -148,4 +148,4 @@ rule group_summaries:
         input_dirs = lambda w: [join(BASEDIR, f"tandem_info_summarized/single/{x}") for x in GROUPS[w.group]],
         output_dir = join(BASEDIR, "tandem_info_summarized/grouped/{group}")
     run:
-        merge_summaries(params.input_dirs, params.output_dir, SUMMARIES)
+        merge_summaries(params.input_dirs, params.output_dir, SUMMARIES, config["with_stopcodons"])

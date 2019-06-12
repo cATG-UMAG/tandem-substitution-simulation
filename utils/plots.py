@@ -1,32 +1,20 @@
 # This file contains plots to show data
-# Assummes the files are located in certains places
 from itertools import product
-from os import path
 
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from matplotlib import pyplot as plt
-from matplotlib import rcParams
+from matplotlib import pyplot as plt, rcParams
 from scipy import stats
 
-# Not the best idea, but for now...
-TANDEM_REAL_DIR = "tandem_info/real"
-TANDEM_SIM_SUMM_DIR = "tandem_info_summarized/sampling"
 
-
-def tandem_distplot(family_name, show_pdf=True, split_axis=False):
+def tandem_distplot(
+    real_tandems_fn, count_sim_size_fn, family_name, show_pdf=True, split_axis_auto=True
+):
     """Plots the distribution of the tandems by simulation vs the real value"""
     # load data
-    df_real = pd.read_csv(
-        _find_filename("{}/{}.tsv".format(TANDEM_REAL_DIR, family_name)), sep="\t"
-    )
-    df_sim = pd.read_csv(
-        _find_filename(
-            "{}/{}/count_sim_size.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-        ),
-        sep="\t",
-    )
+    df_real = pd.read_csv(real_tandems_fn, sep="\t")
+    df_sim = pd.read_csv(count_sim_size_fn, sep="\t")
 
     # filter size
     df_real = df_real[df_real["size"] == 2]
@@ -36,11 +24,14 @@ def tandem_distplot(family_name, show_pdf=True, split_axis=False):
     sim_tandems = df_sim.groupby("simulation").agg({"n": "sum"})
 
     # this value determines bin size and also where to cut axis if split_axis is True
-    adjust_value = 50 if max(sim_tandems.n) - min(sim_tandems.n) < 150 else 100
+    n_sim_range = max(sim_tandems.n) - min(sim_tandems.n)
+    adjust_value = 50 if n_sim_range < 150 else 100
 
-    bin_step = np.ceil(
-        real_tandems / (adjust_value * 5)
-    )  # guarantees good visualization in the pdf output
+    # guarantees good visualization in the pdf output
+    bin_step = np.ceil(real_tandems / (adjust_value * 5))
+
+    # split the axis in two if the real value is too far away from the simulation distribution
+    split_axis = split_axis_auto and (real_tandems - max(sim_tandems.n)) / n_sim_range > 1
     if split_axis:
         # Make a figure with 2 subplots
         fig, (ax, ax2) = plt.subplots(
@@ -57,9 +48,8 @@ def tandem_distplot(family_name, show_pdf=True, split_axis=False):
         ax2.set_xlim(*ax2_limits)
     else:
         fig, ax = plt.subplots(figsize=(12, 8))
-        ax2 = (
-            ax
-        )  # this way is not neccesary to use conditions to know where to plot the real value
+        # this way is not neccesary to use conditions to know where to plot the real value
+        ax2 = ax
 
     # plot simulated and real values
     ax.hist(
@@ -67,6 +57,7 @@ def tandem_distplot(family_name, show_pdf=True, split_axis=False):
         bins=np.arange(min(sim_tandems.n), max(sim_tandems.n), bin_step),
         align="left",
         lw=0.1,
+        edgecolor="w",
         label="simulated",
     )
     ax2.axvline(
@@ -90,9 +81,9 @@ def tandem_distplot(family_name, show_pdf=True, split_axis=False):
     fig.suptitle(
         "Distribution of tandems by simulation ({})".format(family_name),
         fontsize=rcParams["axes.titlesize"],
+        y=0.92,
     )
-    fig.text(0.5, -0.01, "Tandems by simulations", ha="center")
-    # ax.legend(loc='upper left')
+    fig.text(0.5, 0.04, "Tandems by simulations", ha="center")
 
     if show_pdf:
         pdf = stats.norm.pdf(
@@ -118,9 +109,9 @@ def tandem_distplot(family_name, show_pdf=True, split_axis=False):
     return fig
 
 
-def mutations_byseq_distplot(family_name):
+def mutations_byseq_distplot(mutations_by_seq_fn, family_name):
     """Plots the distribution of the mutations by each sequence"""
-    with open("mutation_info/mutations_by_seq.txt") as f:
+    with open(mutations_by_seq_fn) as f:
         for line in f.read().splitlines():
             line = line.split("\t")
             if line[0] == family_name:
@@ -133,6 +124,7 @@ def mutations_byseq_distplot(family_name):
         mutations_by_seq,
         bins=np.arange(min(mutations_by_seq), max(mutations_by_seq)),
         align="left",
+        rwidth=0.8
     )
     ax.set(
         title="Distribution of mutations by sequence ({})".format(family_name),
@@ -144,11 +136,9 @@ def mutations_byseq_distplot(family_name):
     return fig
 
 
-def mutation_probability(family_name):
+def mutation_probability(mutation_info_fn, family_name):
     """Plots the probability of mutation of each position"""
-    df = pd.read_csv(
-        _find_filename("mutation_info/{}.tsv".format(family_name)), sep="\t"
-    )
+    df = pd.read_csv(mutation_info_fn, sep="\t")
 
     # plot
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -163,17 +153,12 @@ def mutation_probability(family_name):
     return fig
 
 
-def cluster_size_distribution(family_name):
+def cluster_size_distribution(
+    real_tandems_fn, count_size_fn, family_name, n_simulations
+):
     """Plots the distribution of the sizes of clusters found (simulated vs real)"""
-    df_real = pd.read_csv(
-        _find_filename("{}/{}.tsv".format(TANDEM_REAL_DIR, family_name)), sep="\t"
-    )
-    df_sim = pd.read_csv(
-        _find_filename(
-            "{}/{}/count_sim_size.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-        ),
-        sep="\t",
-    )
+    df_real = pd.read_csv(real_tandems_fn, sep="\t")
+    df_sim = pd.read_csv(count_size_fn, sep="\t")
 
     # group clusters by size
     df_real_bysize = (
@@ -182,18 +167,11 @@ def cluster_size_distribution(family_name):
         .reset_index()
         .rename(columns={"seq_id": "real"})
     )
-    df_sim_bysize = (
-        df_sim.groupby("size")
-        .agg({"n": "sum"})
-        .reset_index()
-        .rename(columns={"n": "simulation"})
-    )
-    df_sim_bysize["simulation"] = np.round(
-        df_sim_bysize["simulation"] / len(df_sim.simulation.unique())
-    )  # get the average of all the simulations
-    df_sim_bysize = df_sim_bysize[
-        df_sim_bysize.simulation != 0
-    ]  # drop the rows with 0 tandems
+    df_sim_bysize = df_sim.rename(columns={"n": "simulation"})
+    # get the average of all the simulations
+    df_sim_bysize["simulation"] = np.round(df_sim_bysize["simulation"] / n_simulations)
+    # drop the rows with 0 tandems
+    df_sim_bysize = df_sim_bysize[df_sim_bysize.simulation != 0]
 
     # join data in a single dataframe
     df_by_size = pd.merge(df_real_bysize, df_sim_bysize, how="outer").fillna(0)
@@ -231,41 +209,23 @@ def cluster_size_distribution(family_name):
     return fig
 
 
-def stop_codon_distribution(family_name):
+def stop_codon_distribution(
+    count_size_fn, count_size_stop_fn, family_name, n_simulations
+):
     """Plots the distribution of the clusters found (with/without stop codons)"""
-    df_nostop = pd.read_csv(
-        _find_filename(
-            "{}/{}/count_sim_size.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-        ),
-        sep="\t",
-    )
-    df_stop = pd.read_csv(
-        _find_filename(
-            "{}/{}/count_sim_size_stop.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-        ),
-        sep="\t",
-    )
+    df_nostop = pd.read_csv(count_size_fn, sep="\t")
+    df_stop = pd.read_csv(count_size_stop_fn, sep="\t")
 
     # group clusters by size
-    df_nostop_bysize = (
-        df_nostop.groupby("size")
-        .agg({"n": "sum"})
-        .reset_index()
-        .rename(columns={"n": "no stop codon"})
-    )
+    df_nostop_bysize = df_nostop.rename(columns={"n": "no stop codon"})
     df_nostop_bysize["no stop codon"] = np.round(
-        df_nostop_bysize["no stop codon"] / len(df_nostop.simulation.unique())
+        df_nostop_bysize["no stop codon"] / n_simulations
     )
     df_nostop_bysize = df_nostop_bysize[df_nostop_bysize["no stop codon"] != 0]
 
-    df_stop_bysize = (
-        df_stop.groupby("size")
-        .agg({"n": "sum"})
-        .reset_index()
-        .rename(columns={"n": "stop codon"})
-    )
+    df_stop_bysize = df_stop.rename(columns={"n": "stop codon"})
     df_stop_bysize["stop codon"] = np.round(
-        df_stop_bysize["stop codon"] / len(df_stop.simulation.unique())
+        df_stop_bysize["stop codon"] / n_simulations
     )
     df_stop_bysize = df_stop_bysize[df_stop_bysize["stop codon"] != 0]
 
@@ -307,27 +267,12 @@ def stop_codon_distribution(family_name):
     return fig
 
 
-def tandem_heatmap(family_name, target="real", stop_codons=False):
+def tandem_heatmap(filename, family_name, target="real", n_simulations=1):
     """Plots a heatmap of all the possible tandem substitutions"""
-    if target == "real":
-        df = pd.read_csv(
-            _find_filename("{}/{}.tsv".format(TANDEM_REAL_DIR, family_name)), sep="\t"
-        )
-    elif target == "simulated" and stop_codons is False:  # simulated
-        df = pd.read_csv(
-            _find_filename(
-                "{}/{}/count_sim_mut.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-            ),
-            sep="\t",
-        )
-    else:  # stop codons
-        df = pd.read_csv(
-            _find_filename(
-                "{}/{}/count_sim_mut_stop.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-            ),
-            sep="\t",
-        )
+    df = pd.read_csv(filename, sep="\t")
     df = df[df["size"] == 2]
+
+    stop_codons = "_stop" in filename
 
     # get all combinations of dinucleotides to fill with 0 later
     dinucleotides = ["".join(x) for x in product("ACGT", repeat=2)]
@@ -358,10 +303,10 @@ def tandem_heatmap(family_name, target="real", stop_codons=False):
 
     # if the dataset is from the simulation, get the average between all the simulations
     if target == "simulated":
-        table = np.round(table / len(df.simulation.unique()), 1)
+        table = np.round(table / n_simulations, 1)
 
     # some variables
-    annot_fmt = ".0f" if target == "real" else ".1f"
+    annot_fmt = ".1f" if stop_codons else ".0f"
     cbar_label = "Number of tandems" + (
         " (average of simulations)" if target == "simulated" else ""
     )
@@ -391,19 +336,14 @@ def tandem_heatmap(family_name, target="real", stop_codons=False):
     return fig
 
 
-def tandem_heatmap_percentage(family_name):
+def tandem_heatmap_percentage(
+    real_tandems_fn, count_mut_fn, family_name, n_simulations, limit_perc=False
+):
     """Plots a heatmap of all the possible tandem substitutions"""
-    df_real = pd.read_csv(
-        _find_filename("{}/{}.tsv".format(TANDEM_REAL_DIR, family_name)), sep="\t"
-    )
+    df_real = pd.read_csv(real_tandems_fn, sep="\t")
     df_real = df_real[df_real["size"] == 2]
 
-    df_sim = pd.read_csv(
-        _find_filename(
-            "{}/{}/count_sim_mut.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-        ),
-        sep="\t",
-    )
+    df_sim = pd.read_csv(count_mut_fn, sep="\t")
     df_sim = df_sim[df_sim["size"] == 2]
 
     # get all combinations of dinucleotides to fill with 0 later
@@ -438,12 +378,14 @@ def tandem_heatmap_percentage(family_name):
     )
 
     # get the average between all the simulations
-    table_sim = table_sim / len(df_sim.simulation.unique())
+    table_sim = table_sim / n_simulations
 
     # get percentage table
     table = np.round(table_sim / table_real * 100, 0)
     table = table.replace([np.inf, -np.inf], np.nan)
-    # table.clip(upper=100, inplace=True)  # here!
+
+    if limit_perc:
+        table.clip(upper=100, inplace=True)
 
     # plot
     with sns.axes_style("darkgrid"):
@@ -467,25 +409,13 @@ def tandem_heatmap_percentage(family_name):
     return fig
 
 
-def tandem_mutation_probability_heatmap(family_name, target="real", base2=True):
+def tandem_mutation_probability_heatmap(
+    tandems_fn, mutation_info_fn, family_name, n_simulations, target="real", base2=True
+):
     """"Groups tandems by position mutation probability and reference in each nucleotide of the tandem"""
-    if target == "real":
-        df = pd.read_csv(
-            _find_filename("{}/{}.tsv".format(TANDEM_REAL_DIR, family_name)), sep="\t"
-        )
-        df = df[df["size"] == 2]
-    else:
-        df = pd.read_csv(
-            _find_filename(
-                "{}/{}/count_sim_pos.tsv".format(TANDEM_SIM_SUMM_DIR, family_name)
-            ),
-            sep="\t",
-        )
-        df = df[df["size"] == 2]
-        n_simulations = len(df.simulation.unique())
-        df = df.groupby(["pos", "ref", "size"]).agg({"n": "sum"}).reset_index()
+    df = pd.read_csv(tandems_fn, sep="\t")
 
-    df_prob = pd.read_csv("mutation_info/{}.tsv".format(family_name), sep="\t")
+    df_prob = pd.read_csv(mutation_info_fn, sep="\t")
 
     df["2"] = df.pos + 1  # 2nd nucleotide
     df = df.reset_index().rename(columns={"pos": "1", "index": "id"})
@@ -596,10 +526,3 @@ def tandem_mutation_probability_heatmap(family_name, target="real", base2=True):
 
 def _base2_str(x):
     return r"2^{" + str(int(round(np.log2(x), 0))) + "}" if x > 0 else "0"
-
-
-def _find_filename(filepath):
-    for suffix in ["", ".gz", ".xz"]:
-        if path.isfile(filepath + suffix):
-            return filepath + suffix
-    raise FileNotFoundError("File {} does not exist".format(filepath))

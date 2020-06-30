@@ -5,4 +5,5 @@ SUMMARY_DETAILS = (
     (["ref", "alt", "context", "size"], "count_mutation_context"),
     (["aa_change"], "count_aachange"),
     (["frame_pos"], "count_framepos"),
+    (["pos", "aa_change", "frame_pos", "size"], "count_pos_aachange_framepos")
 )

@@ -39,6 +39,7 @@ def summarize(df, grouping_vars, output_dir, output_name):
                 sep="\t",
                 index=False,
             )
+            df_gr = None
 
 
 if __name__ == "__main__":

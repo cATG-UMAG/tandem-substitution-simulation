@@ -1,4 +1,4 @@
-configfile: "config.yaml"
+# configfile: "config.yaml"
 
 from os.path import join
 from utils.helpers import get_name, get_all_names, merge_groups_mutation_info, merge_targets_mutation_info, merge_summaries
@@ -39,9 +39,9 @@ rule get_real_tandems:
 rule multiple_target_real_tandem_info:
     input:
         lambda w: [join(BASEDIR, f"tandem_info/single/real/{get_name(x)}.tsv")
-            for x in config["targets"][w.name]["fasta"]]
+            for x in config["targets"][w.target]["fasta"]]
     output:
-        BASEDIR + "tandem_info/single/real/{name}.tsv"
+        join(BASEDIR, "tandem_info/single/real/{target}.tsv")
     shell:
         "head -n 1 {input[0]} > {output} && \
         for f in {input}; do tail -q -n +2 $f >> {output}; done"

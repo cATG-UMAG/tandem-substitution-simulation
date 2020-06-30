@@ -7,6 +7,8 @@ import seaborn as sns
 from matplotlib import pyplot as plt, rcParams
 from scipy import stats
 
+PALETTE = ['#59b5e3', '#1aa075']
+
 
 def tandem_distplot(
     real_tandems_fn, count_sim_size_fn, family_name, show_pdf=True, split_axis_auto=True
@@ -23,19 +25,19 @@ def tandem_distplot(
     real_tandems = len(df_real)
     sim_tandems = df_sim.groupby("simulation").agg({"n": "sum"})
 
-    # this value determines bin size and also where to cut axis if split_axis is True
-    n_sim_range = max(sim_tandems.n) - min(sim_tandems.n)
-    adjust_value = 50 if n_sim_range < 150 else 100
+    # this value determines bin size and also where to cut axis if split_axis_auto is True
+    n_sim_range = np.percentile(sim_tandems.n, 90) - np.percentile(sim_tandems.n, 10)
+    adjust_value = 10
 
     # guarantees good visualization in the pdf output
-    bin_step = np.ceil(real_tandems / (adjust_value * 5))
+    bin_step = np.ceil(n_sim_range / (adjust_value * 2.5))
 
     # split the axis in two if the real value is too far away from the simulation distribution
     split_axis = split_axis_auto and (real_tandems - max(sim_tandems.n)) / n_sim_range > 1
     if split_axis:
         # Make a figure with 2 subplots
         fig, (ax, ax2) = plt.subplots(
-            1, 2, sharey=True, figsize=(12, 8), gridspec_kw={"width_ratios": [5, 1]}
+            1, 2, sharey=True, figsize=(12, 8), gridspec_kw={"width_ratios": [7, 1]}
         )
         ax.set_xlim(
             adjust_value * np.floor(min(sim_tandems.n) / adjust_value),
@@ -43,7 +45,7 @@ def tandem_distplot(
         )
         ax2_limits = [
             adjust_value * np.floor(real_tandems / adjust_value),
-            adjust_value * np.ceil(real_tandems / adjust_value),
+            adjust_value * (np.floor(real_tandems / adjust_value) + 1),
         ]
         ax2.set_xlim(*ax2_limits)
     else:
@@ -58,14 +60,15 @@ def tandem_distplot(
         align="left",
         lw=0.1,
         edgecolor="w",
-        label="simulated",
+        color=PALETTE[0],
+        label="simulated"
     )
     ax2.axvline(
         x=real_tandems,
         ymin=0,
         ymax=1,
         linewidth=1.5,
-        color="forestgreen",
+        color=PALETTE[1],
         label="observed",
     )
 
@@ -114,7 +117,7 @@ def mutations_byseq_distplot(mutations_by_seq_fn, family_name):
     with open(mutations_by_seq_fn) as f:
         for line in f.read().splitlines():
             line = line.split("\t")
-            if line[0] == family_name:
+            if line[0] == family_name.replace("*", "_"):
                 mutations_by_seq = [int(x) for x in line[1].split(",")]
                 break
 
@@ -124,7 +127,8 @@ def mutations_byseq_distplot(mutations_by_seq_fn, family_name):
         mutations_by_seq,
         bins=np.arange(min(mutations_by_seq), max(mutations_by_seq)),
         align="left",
-        rwidth=0.8
+        rwidth=0.8,
+        color=PALETTE[0]
     )
     ax.set(
         title="Distribution of mutations by sequence ({})".format(family_name),
@@ -142,7 +146,7 @@ def mutation_probability(mutation_info_fn, family_name):
 
     # plot
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.bar(x=df.position, height=df.mutation_probability, lw=0)
+    ax.bar(x=df.position, height=df.mutation_probability, lw=0, width=0.9, color=PALETTE[0])
     ax.set(
         title="Mutation probabilities by position ({})".format(family_name),
         xlabel="Position in sequence",
@@ -184,7 +188,7 @@ def cluster_size_distribution(
 
     # plot
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.barplot(data=df_by_size, x="size", y="n", hue="target", ax=ax)
+    sns.barplot(data=df_by_size, x="size", y="n", hue="target", ax=ax, palette=PALETTE)
     # annotations
     for p in ax.patches:
         ax.annotate(
@@ -240,7 +244,7 @@ def stop_codon_distribution(
 
     # plot
     fig, ax = plt.subplots(figsize=(8, 5))
-    sns.barplot(data=df_by_size, x="size", y="n", hue="category", ax=ax)
+    sns.barplot(data=df_by_size, x="size", y="n", hue="category", ax=ax, palette=PALETTE)
     # annotations
     for p in ax.patches:
         ax.annotate(
@@ -313,12 +317,12 @@ def tandem_heatmap(filename, family_name, target="real", n_simulations=1):
     stop_msg = "with stop codons" if stop_codons else ""
 
     # plot
-    with sns.axes_style("darkgrid"):
+    with sns.axes_style("whitegrid", {"axes.facecolor": "#fbfbfb"}):
         fig, ax = plt.subplots(figsize=(13, 11))
         sns.heatmap(
             table.iloc[::-1],
             ax=ax,
-            cmap="YlGnBu",
+            cmap=sns.light_palette("#48C9B0", 100),
             annot=True,
             fmt=annot_fmt,
             square=True,
@@ -388,12 +392,12 @@ def tandem_heatmap_percentage(
         table.clip(upper=100, inplace=True)
 
     # plot
-    with sns.axes_style("darkgrid"):
+    with sns.axes_style("whitegrid", {"axes.facecolor": "#fbfbfb"}):
         fig, ax = plt.subplots(figsize=(13, 11))
         sns.heatmap(
             table.iloc[::-1],
             ax=ax,
-            cmap="YlGnBu",
+            cmap=sns.light_palette("#48C9B0", 100),
             annot=True,
             square=True,
             fmt=".0f",
@@ -401,7 +405,7 @@ def tandem_heatmap_percentage(
             cbar_kws={"label": "Percentage of false tandems (simulated/real)"},
         )
         ax.set(
-            title="Percentage of false Tandems ({})".format(family_name),
+            title="Percentage of false tandems ({})".format(family_name),
             xlabel="ALT",
             ylabel="REF",
         )

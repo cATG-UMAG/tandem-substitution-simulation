@@ -1,28 +1,44 @@
 #!/usr/bin/env python3
-# Generates summary tables (counts) to speed up viewing/plotting data later
+import argparse
 import sys
 from os import makedirs, path
-from utils.constants import SUMMARY_DETAILS
+from typing import List, Optional, Union
 
 import pandas as pd
+import yaml
 
 
 def main():
-    if len(sys.argv) < 3:
-        print("./summarize_tandem_info.py <tandem_file.tsv> <output_dir>")
-        exit(-1)
+    args = parse_args()
 
-    filename, output_dir = sys.argv[1:3]
+    if args.output_dir:
+        makedirs(args.output_dir, exist_ok=True)
 
-    makedirs(output_dir, exist_ok=True)
+    df = pd.read_csv(args.tandem_file, sep="\t")
 
-    df = pd.read_csv(filename, sep="\t")
+    with open(args.summary_file) as f:
+        summaries = yaml.load(f, Loader=yaml.SafeLoader)
 
-    for x in SUMMARY_DETAILS:
-        summarize(df, x[0], output_dir, x[1])
+    for x in summaries:
+        summarize(df, x["fields"], x["name"], args.output_dir)
 
 
-def summarize(df, grouping_vars, output_dir, output_name):
+def summarize(
+    df: pd.DataFrame,
+    grouping_vars: List[str],
+    output_name: str,
+    output_dir: Optional[str] = None,
+):
+    """
+    Makes a summary count table and saves it
+    :param df: tandem list dataframe
+    :param grouping_vars: list of variables to group by
+    :param output_name: output filename base
+    :param output_dir: output directory
+    """
+    if not output_dir:
+        output_dir = "."
+
     for v in [False, True]:
         suffix = "_stop" if v is True else ""
         subset = df[df.stop_codon == v]
@@ -31,8 +47,8 @@ def summarize(df, grouping_vars, output_dir, output_name):
             df_gr = (
                 subset.groupby(grouping_vars)
                 .size()
+                .to_frame("n")
                 .reset_index()
-                .rename(columns={0: "n"})
             )
             df_gr.to_csv(
                 path.join(output_dir, f"{output_name}{suffix}.tsv"),
@@ -40,6 +56,36 @@ def summarize(df, grouping_vars, output_dir, output_name):
                 index=False,
             )
             df_gr = None
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generates summary tables (counts) to speed up viewing/plotting data later"
+    )
+
+    parser.add_argument(
+        "tandem_file",
+        metavar="file",
+        action="store",
+        help="tandem list file (.tsv[.gz])",
+    )
+
+    parser.add_argument(
+        "summary_file",
+        metavar="file",
+        action="store",
+        help="summaries list file (.yml)",
+    )
+
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        metavar="output_dir",
+        action="store",
+        help="directory to save output files",
+    )
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":

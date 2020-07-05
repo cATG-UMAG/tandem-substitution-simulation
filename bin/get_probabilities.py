@@ -54,7 +54,7 @@ def main():
     # save files
     df.to_csv(path.join(output_dir, f"{name}.tsv"), sep="\t", index=False)
 
-    with open(path.join(output_dir, "mutations_by_seq.txt"), "w") as f:
+    with open(path.join(output_dir, args.mutations_by_seq), "w") as f:
         f.write(f"{name}\t{','.join(str(x) for x in mutations_by_seq)}")
 
 
@@ -119,6 +119,15 @@ def parse_arguments():
         metavar="target_name",
         action="store",
         help="use this name to get reference and in output files instead of sequences filename",
+    )
+
+    parser.add_argument(
+        "--mutations-by-seq",
+        "-m",
+        metavar="mutations_by_seq",
+        action="store",
+        default="mutations_by_seq.txt",
+        help="mutations by sequence output filename"
     )
 
     return parser.parse_args()

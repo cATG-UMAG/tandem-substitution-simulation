@@ -16,5 +16,5 @@ __pycache__/
 
 # Project specific rules
 /*_info*/
-fasta/
+input/
 output/

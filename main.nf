@@ -6,21 +6,30 @@
 references = file(params.references)
 summary_config = file(params.summary_list)
 
+// targets: [name, [...files]]
 Channel.from(params.targets.entrySet())
   .map { [it.key, it.value.collect { file(it).baseName }] }
   .set { targets_grouped_ch }
 
+// all targets combinations [file basename, name]
 Channel.from(params.targets.entrySet())
   .flatMap { it.value.collect { x -> [file(x).baseName, it.key] } }
   .set { files_with_target_ch }
 
+// all files from all targets in a flat list
 Channel.from(params.targets.entrySet())
   .flatMap { it.value.collect { file(it) } }
   .into { targets_allfiles_ch; targets_allfiles_ch2 }
 
+// groups: [name, [...targets]]
 Channel.from(params.groups.entrySet())
   .map { [it.key, it.value] }
-  .into { groups_ch; groups_ch2; groups_ch3 }
+  .set { groups_ch }
+
+// all groups combinations [target, name]
+Channel.from(params.groups.entrySet())
+  .flatMap { it.value.collect { x -> [x, it.key] } }
+  .into { targets_with_group_ch; targets_with_group_ch2 }
 
 
 /*
@@ -205,6 +214,16 @@ groups_ch
 
 
 /*
+ * Arrange mutational info in groups to merge it later
+ */
+mutational_info_ch.full2
+  .combine(targets_with_group_ch, by: 0)
+  .groupTuple(by: 3)
+  .map { [it[3], it[1], it[2]] }
+  .set { mutational_info_by_group_ch }
+
+
+/*
  * Merge mutational info by groups
  */
 process mergeGroupMutationalInfo {
@@ -212,17 +231,13 @@ process mergeGroupMutationalInfo {
   publishDir 'output/mutation_info/grouped/', mode: 'copy', pattern: '*.tsv'
 
   input:
-  val mutational_info_list from mutational_info_ch.full2.toList()
-  tuple val(group_name), val(names) from groups_ch2
+  tuple val(group_name), path(mutation_info_files), path(mutations_by_seq_files) from mutational_info_by_group_ch
 
   output:
   path "${group_name}.tsv"
   path 'mutations_by_seq.txt' into group_mutations_by_seq_ch
 
   script:
-  filtered_list = mutational_info_list.findAll { it[0] in names }
-  mutation_info_files = filtered_list.collect { it[1] }.join(' ')
-  mutations_by_seq_files = filtered_list.collect { it[2] }.join(' ')
   """
   merge_mutation_info.py $mutation_info_files -o ${group_name}.tsv
   merge_mutations_by_seq.py $mutations_by_seq_files -n $group_name
@@ -263,21 +278,32 @@ process summarizeTandems {
 }
 
 
+/*
+ * Arrange summary directories in groups to merge it later
+ */
+summaries_ch
+  .combine(targets_with_group_ch2, by: 0)
+  .groupTuple(by: 2)
+  .map { [it[2], it[1]] }
+  .set { summaries_by_group_ch }
+
+
+/*
+ * Merge summaries by group
+ */
 process mergeSummariesByGroup {
   tag "$group_name"
   publishDir "output/tandem_info_summarized/grouped/", mode: 'copy'
 
   input:
-  val summary_dirs_list from summaries_ch.toList()
-  tuple val(group_name), val(names) from groups_ch3
+  tuple val(group_name), path(summary_dirs) from summaries_by_group_ch
   path summary_config
 
   output:
   path "${group_name}", type: 'dir'
 
   script:
-  target_dirs = summary_dirs_list.findAll { it[0] in names }.collect { it[1] }.join(" ")
   """
-  merge_summaries.py $summary_config $target_dirs -o "${group_name}"
+  merge_summaries.py $summary_config $summary_dirs -o "${group_name}"
   """
 }

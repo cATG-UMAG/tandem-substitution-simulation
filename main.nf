@@ -125,13 +125,13 @@ process mergeTargetMutationalInfo {
   tuple val(name), path(mutation_info_files), path(mutations_by_seq_files) from multational_info_pre_ch.multi
 
   output:
-  tuple val(name), path("${name}.tsv"), path('mutations_by_seq.txt') into merged_mutational_info_ch
-  path 'mutations_by_seq.txt' into mutations_by_seq_ch
+  tuple val(name), path("${name}.tsv"), path("mbs_${name}.txt") into merged_mutational_info_ch
+  path "mbs_${name}.txt" into mutations_by_seq_ch
 
   script:
   """
   merge_mutation_info.py $mutation_info_files -o ${name}.tsv
-  merge_mutations_by_seq.py $mutations_by_seq_files -n $name
+  merge_mutations_by_seq.py $mutations_by_seq_files -n $name -o mbs_${name}.txt
   """
 }
 
@@ -236,7 +236,7 @@ if (params.with_groups) {
    */
   groups_ch
     .flatMap { it[1].collect{ x -> [x, it[0]] } }
-    .join(observed_tandems_grouped_ch)
+    .combine(observed_tandems_grouped_ch, by: 0)
     .collectFile(
         keepHeader: true,
         skip: 1,

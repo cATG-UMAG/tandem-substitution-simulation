@@ -1,5 +1,5 @@
-BootStrap: library
-From: debian:10
+BootStrap: docker
+From: debian:10-slim
 
 %labels
     Author Diego Alvarez S. (dialvarezs@gmail.com)

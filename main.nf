@@ -1,8 +1,14 @@
 #!/usr/bin/env nextflow
 
 /*
- * Channels
+ * Inputs preparation
  */
+if(!(params.containsKey("groups")) || (params.groups == null)) {
+  params.with_groups = false
+} else {
+  params.with_groups = true
+}
+
 references = file(params.references)
 summary_config = file(params.summary_list)
 
@@ -21,15 +27,17 @@ Channel.from(params.targets.entrySet())
   .flatMap { it.value.collect { file(it) } }
   .into { targets_allfiles_ch; targets_allfiles_ch2 }
 
-// groups: [name, [...targets]]
-Channel.from(params.groups.entrySet())
-  .map { [it.key, it.value] }
-  .set { groups_ch }
+if (params.with_groups) {
+  // groups: [name, [...targets]]
+  Channel.from(params.groups.entrySet())
+    .map { [it.key, it.value] }
+    .set { groups_ch }
 
-// all groups combinations [target, name]
-Channel.from(params.groups.entrySet())
-  .flatMap { it.value.collect { x -> [x, it.key] } }
-  .into { targets_with_group_ch; targets_with_group_ch2 }
+  // all groups combinations [target, name]
+  Channel.from(params.groups.entrySet())
+    .flatMap { it.value.collect { x -> [x, it.key] } }
+    .into { targets_with_group_ch; targets_with_group_ch2 }
+}
 
 
 /*
@@ -199,65 +207,6 @@ process sortAndCompress {
 
 
 /*
- * Merge tandem observed info by groups
- */
-groups_ch
-  .flatMap { it[1].collect{ x -> [x, it[0]] } }
-  .join(observed_tandems_grouped_ch)
-  .collectFile(
-      keepHeader: true,
-      skip: 1,
-      storeDir: 'output/tandem_info/observed/grouped/'
-    ) {
-    ["${it[1]}.tsv", it[2]]
- }
-
-
-/*
- * Arrange mutational info in groups to merge it later
- */
-mutational_info_ch.full2
-  .combine(targets_with_group_ch, by: 0)
-  .groupTuple(by: 3)
-  .map { [it[3], it[1], it[2]] }
-  .set { mutational_info_by_group_ch }
-
-
-/*
- * Merge mutational info by groups
- */
-process mergeGroupMutationalInfo {
-  tag "$group_name"
-  publishDir 'output/mutation_info/grouped/', mode: 'copy', pattern: '*.tsv'
-
-  input:
-  tuple val(group_name), path(mutation_info_files), path(mutations_by_seq_files) from mutational_info_by_group_ch
-
-  output:
-  path "${group_name}.tsv"
-  path 'mutations_by_seq.txt' into group_mutations_by_seq_ch
-
-  script:
-  """
-  merge_mutation_info.py $mutation_info_files -o ${group_name}.tsv
-  merge_mutations_by_seq.py $mutations_by_seq_files -n $group_name
-  """
-}
-
-
-/*
- * Merge grouped "mutations by sequence" files
- */
-group_mutations_by_seq_ch
-  .collectFile(
-    name: 'mutations_by_seq.txt',
-    storeDir: 'output/mutation_info/grouped/',
-    newLine: true,
-    sort: { it.text }
-  )
-
-
-/*
  * Summarize tandem info
  */
 process summarizeTandems {
@@ -279,31 +228,94 @@ process summarizeTandems {
 
 
 /*
- * Arrange summary directories in groups to merge it later
+ * Grouping tasks: only executing them if there are groups defined
  */
-summaries_ch
-  .combine(targets_with_group_ch2, by: 0)
-  .groupTuple(by: 2)
-  .map { [it[2], it[1]] }
-  .set { summaries_by_group_ch }
+if (params.with_groups) {
+  /*
+   * Merge tandem observed info by groups
+   */
+  groups_ch
+    .flatMap { it[1].collect{ x -> [x, it[0]] } }
+    .join(observed_tandems_grouped_ch)
+    .collectFile(
+        keepHeader: true,
+        skip: 1,
+        storeDir: 'output/tandem_info/observed/grouped/'
+      ) {
+      ["${it[1]}.tsv", it[2]]
+  }
+
+  /*
+   * Arrange mutational info in groups to merge it later
+   */
+  mutational_info_ch.full2
+    .combine(targets_with_group_ch, by: 0)
+    .groupTuple(by: 3)
+    .map { [it[3], it[1], it[2]] }
+    .set { mutational_info_by_group_ch }
 
 
-/*
- * Merge summaries by group
- */
-process mergeSummariesByGroup {
-  tag "$group_name"
-  publishDir "output/tandem_info_summarized/grouped/", mode: 'copy'
+  /*
+  * Merge mutational info by groups
+  */
+  process mergeGroupMutationalInfo {
+    tag "$group_name"
+    publishDir 'output/mutation_info/grouped/', mode: 'copy', pattern: '*.tsv'
 
-  input:
-  tuple val(group_name), path(summary_dirs) from summaries_by_group_ch
-  path summary_config
+    input:
+    tuple val(group_name), path(mutation_info_files), path(mutations_by_seq_files) from mutational_info_by_group_ch
 
-  output:
-  path "${group_name}", type: 'dir'
+    output:
+    path "${group_name}.tsv"
+    path 'mutations_by_seq.txt' into group_mutations_by_seq_ch
 
-  script:
-  """
-  merge_summaries.py $summary_config $summary_dirs -o "${group_name}"
-  """
+    script:
+    """
+    merge_mutation_info.py $mutation_info_files -o ${group_name}.tsv
+    merge_mutations_by_seq.py $mutations_by_seq_files -n $group_name
+    """
+  }
+
+
+  /*
+  * Merge grouped "mutations by sequence" files
+  */
+  group_mutations_by_seq_ch
+    .collectFile(
+      name: 'mutations_by_seq.txt',
+      storeDir: 'output/mutation_info/grouped/',
+      newLine: true,
+      sort: { it.text }
+    )
+
+
+  /*
+  * Arrange summary directories in groups to merge it later
+  */
+  summaries_ch
+    .combine(targets_with_group_ch2, by: 0)
+    .groupTuple(by: 2)
+    .map { [it[2], it[1]] }
+    .set { summaries_by_group_ch }
+
+
+  /*
+  * Merge summaries by group
+  */
+  process mergeSummariesByGroup {
+    tag "$group_name"
+    publishDir "output/tandem_info_summarized/grouped/", mode: 'copy'
+
+    input:
+    tuple val(group_name), path(summary_dirs) from summaries_by_group_ch
+    path summary_config
+
+    output:
+    path "${group_name}", type: 'dir'
+
+    script:
+    """
+    merge_summaries.py $summary_config $summary_dirs -o "${group_name}"
+    """
+  }
 }

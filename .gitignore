@@ -6,12 +6,13 @@ __pycache__/
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Snakemake
-.snakemake/
+# Nextflow
+.nextflow/
+.nextflow.log*
 
 # Editor configurations
-.vscode
-.idea
+.vscode/
+.idea/
 
 # Project specific rules
 /*_info*/

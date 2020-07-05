@@ -1,0 +1,30 @@
+- name: count_sim_size
+  fields:
+  - simulation
+  - size
+- name: count_size
+  fields:
+  - size
+- name: count_mutation
+  fields:
+  - ref
+  - alt
+  - size
+- name: count_mutation_context
+  fields:
+  - ref
+  - alt
+  - context
+  - size
+- name: count_aachange
+  fields:
+  - aa_change
+- name: count_framepos
+  fields:
+  - frame_pos
+- name: count_pos_aachange_framepos
+  fields:
+  - pos                                                                                                                                                                                                                                                                                                                                                                                     
+  - aa_change                                                                                                                                                                                                                                                                                                                                                                               
+  - frame_pos                                                                                                                                                                                                                                                                                                                                                                               
+  - size

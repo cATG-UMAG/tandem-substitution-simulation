@@ -20,11 +20,11 @@ def main():
 
     # no path/no extension, this name will be the one to search inside reference files
     name = re.sub(r"^.*/|[.].*$", "", fasta_fn)
-    ref = references[name]
+    refseq = references[name]
     seqs = [x for x in SeqIO.parse(fasta_fn, "fasta")]
     # save all mutations in a 2 level dict: seq_id in 1st level, position in 2nd level
     seq_mutations = {
-        x.id: {i: dict(ref=ref[i], alt=x[i]) for i in range(len(x)) if ref[i] != x[i]}
+        x.id: {i: dict(ref=refseq[i], alt=x[i]) for i in range(len(x)) if refseq[i] != x[i]}
         for x in seqs
     }
 
@@ -34,9 +34,9 @@ def main():
             ref = "".join(seq_mutations[s][i]["ref"] for i in sorted(v))
             alt = "".join(seq_mutations[s][i]["alt"] for i in sorted(v))
 
-            mutations.append([s, min(v), ref, alt, len(ref)])
+            mutations.append([s, min(v), ref, alt, len(ref), get_context(refseq, min(v), 2, len(ref))])
 
-    df = pd.DataFrame(mutations, columns=["seq_id", "pos", "ref", "alt", "size"])
+    df = pd.DataFrame(mutations, columns=["seq_id", "pos", "ref", "alt", "size", "context"])
     df.to_csv(output_fn, index=False, sep="\t")
 
 
@@ -49,6 +49,28 @@ def get_1d_clusters(data, stepsize=1):
     """
     consecutive = np.split(data, np.where(np.diff(data) != stepsize)[0] + 1)
     return [x for x in consecutive if len(x) > 1]
+
+
+def get_context(seq, pos, n=1, s=1):
+    """
+    Gets context from a sequence at a given position.
+    :param seq: the sequence
+    :param pos: target position
+    :param n: context size (each side)
+    :param s: size of the target region, displaces the position of right context
+    :return: a string matching [ACTG]*[.]+[ACTG]*
+    """
+    context = []
+    for n in range(pos - n, pos + n + s):
+        if pos <= n < pos + s:
+            # target region, will be represented with dots
+            context.append(".")
+        elif 0 <= n < len(seq):
+            # context region, if it is in sequence boundaries
+            context.append(seq[n])
+        # else (positions outside sequence) => nothing
+
+    return "".join(context)
 
 
 if __name__ == "__main__":

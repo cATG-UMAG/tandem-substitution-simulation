@@ -1,5 +1,5 @@
 BootStrap: docker
-From: debian:10-slim
+From: python:3.8-slim-buster
 
 %labels
     Author Diego Alvarez S. (dialvarezs@gmail.com)
@@ -8,6 +8,4 @@ From: debian:10-slim
 
 %post
     apt update && apt upgrade -y
-    apt install -y python3 python3-pip wget
-    wget https://raw.githubusercontent.com/CATG-UMAG/tandem-substitution-simulation/master/env/requirements.txt
-    pip3 install -r requirements.txt
+    pip3 install -r https://raw.githubusercontent.com/CATG-UMAG/tandem-substitution-simulation/master/env/requirements.txt

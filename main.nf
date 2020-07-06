@@ -209,21 +209,23 @@ process sortAndCompress {
 /*
  * Summarize tandem info
  */
-process summarizeTandems {
-  tag "$name"
-  publishDir "output/tandem_info_summarized/single/", mode: 'copy'
+if (params.with_sumaries) {
+  process summarizeTandems {
+    tag "$name"
+    publishDir "output/tandem_info_summarized/single/", mode: 'copy'
 
-  input:
-  tuple val(name), path(tandems_file) from simulated_tandems_ch2
-  path summary_config
+    input:
+    tuple val(name), path(tandems_file) from simulated_tandems_ch2
+    path summary_config
 
-  output:
-  tuple val(name), path("${name}", type: 'dir') into summaries_ch
+    output:
+    tuple val(name), path("${name}", type: 'dir') into summaries_ch
 
-  script:
-  """
-  summarize_tandem_info.py $tandems_file $summary_config -o ${name}
-  """
+    script:
+    """
+    summarize_tandem_info.py $tandems_file $summary_config -o ${name}
+    """
+  }
 }
 
 
@@ -246,7 +248,7 @@ if (params.with_groups) {
   }
 
   /*
-   * Arrange mutational info in groups to merge it later
+   * Arrange mutational info in groups to merge them later
    */
   mutational_info_ch.full2
     .combine(targets_with_group_ch, by: 0)
@@ -290,7 +292,7 @@ if (params.with_groups) {
 
 
   /*
-  * Arrange summary directories in groups to merge it later
+  * Arrange summary directories in groups to merge them later
   */
   summaries_ch
     .combine(targets_with_group_ch2, by: 0)

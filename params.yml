@@ -1,47 +1,7 @@
-fasta_files: /home/dialvarezs/bioinformatics/06_Marvyn/tandem_simulation/data_201906/leiden/fasta/IG*.fasta
-references: /home/dialvarezs/bioinformatics/06_Marvyn/tandem_simulation/data_201906/leiden/fasta/references.fasta
+references: <reference_file>
 n_simulations: 100
 with_stopcodons: True
-groups:
-  IGV:
-    - IGHV1-2_02
-    - IGHV1-69_01
-    - IGHV3-21_01
-    - IGHV3-23_01
-    - IGHV3-30_03
-    - IGHV3-33_01
-    - IGHV4-34_01
-    - IGHV4-39_01
-    - IGHV4-59_01
-    - IGKV1-39_01
-    - IGKV3-11_01
-    - IGKV3-15_01
-    - IGKV3-20_01
-    - IGKV3D-15_01
-    - IGKV4-1_01
-    - IGLV2-14_01
-    - IGLV2-23_01
-    - IGLV2-23_02
-    - IGLV2-8_01
-  IGHV:
-    - IGHV1-2_02
-    - IGHV1-69_01
-    - IGHV3-21_01
-    - IGHV3-23_01
-    - IGHV3-30_03
-    - IGHV3-33_01
-    - IGHV4-34_01
-    - IGHV4-39_01
-    - IGHV4-59_01
-  IGKV:
-    - IGKV1-39_01
-    - IGKV3-11_01
-    - IGKV3-15_01
-    - IGKV3-20_01
-    - IGKV3D-15_01
-    - IGKV4-1_01
-  IGLV:
-    - IGLV2-14_01
-    - IGLV2-23_01
-    - IGLV2-23_02
-    - IGLV2-8_01
+with_summaries: True
+summary_list: summaries.yml
+targets: ...
+groups: ...

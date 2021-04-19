@@ -209,7 +209,7 @@ process sortAndCompress {
 /*
  * Summarize tandem info
  */
-if (params.with_sumaries) {
+if (params.with_summaries) {
   process summarizeTandems {
     tag "$name"
     publishDir "output/tandem_info_summarized/single/", mode: 'copy'

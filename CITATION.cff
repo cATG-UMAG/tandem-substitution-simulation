@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: "If this repository was useful for you, please cite it as below."
+authors:
+- family-names: "Alvarez"
+  given-names: "Diego"
+  orcid: "https://orcid.org/0000-0003-0753-274X"
+- family-names: "Sepúlveda"
+  given-names: "Julieta"
+  orcid: "https://orcid.org/0000-0001-6354-3609"
+title: "Tandem Substitutions Simulation"
+url: "https://github.com/catg-umag/tandem-substitution-simulation"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Sepúlveda-Yañez"
+    given-names: "Julieta H."
+    orcid: "https://orcid.org/0000-0001-6354-3609"
+  - family-names: "Alvarez-Saravia"
+    given-names: "Diego"
+    orcid: "https://orcid.org/0000-0003-0753-274X"
+  - family-names: "Pilzecker"
+    given-names: "Bas"
+  - family-names: "van Schouwenburg"
+    given-names: "Pauline A."
+  - family-names: "van der Burg"
+    given-names: "Mirjam"
+  - family-names: "Veelken"
+    given-names: "Hendrik"
+    orcid: "https://orcid.org/0000-0002-9108-3125"
+  - family-names: "Navarrete"
+    given-names: "Marcelo A."
+    orcid: "https://orcid.org/0000-0002-2044-9548"
+  - family-names: "Jacobs"
+    given-names: "Heinz"
+  - family-names: "Koning"
+    given-names: "Marvyn T."
+  doi: "10.3389/fimmu.2021.807015"
+  journal: "Frontiers in Immunology"
+  title: "Tandem Substitutions in Somatic Hypermutation"
+  volume: 12
+  start: 5762
+  year: 2021
